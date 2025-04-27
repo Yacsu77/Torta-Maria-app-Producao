@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Alert, ScrollView, Platform } from 'react-native';
-import { getCurrentSection, clearCurrentSection } from '../auth';
+import { getCurrentSection, clearCurrentSection, getUserData } from '../auth';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import moment from 'moment';
@@ -37,10 +37,16 @@ const CriarPedidos = () => {
   };
 
   useEffect(() => {
-    const carregarSecao = async () => {
+    const carregarDados = async () => {
       try {
-        const secao = await getCurrentSection();
+        // Carrega os dados da seção e do usuário em paralelo
+        const [secao, user] = await Promise.all([
+          getCurrentSection(),
+          getUserData()
+        ]);
+
         setSectionInfo(secao);
+        setUserInfo(user);
         
         if (secao) {
           setPedidoData(prev => ({
@@ -48,18 +54,14 @@ const CriarPedidos = () => {
             id_secao: secao.id,
             Tipo_Pedido: secao.tipo === '2' ? 2 : 1
           }));
-          
-          // Carregar informações do usuário se disponível
-          if (secao.user) {
-            setUserInfo(secao.user);
-          }
         }
       } catch (error) {
-        console.error('Erro ao carregar seção:', error);
+        console.error('Erro ao carregar dados:', error);
+        Alert.alert('Erro', 'Não foi possível carregar os dados da seção ou do usuário');
       }
     };
 
-    carregarSecao();
+    carregarDados();
   }, []);
 
   const handleDateChange = (event, date) => {
@@ -134,7 +136,7 @@ const CriarPedidos = () => {
   };
 
   const removerPontosUsuario = async () => {
-    if (!userInfo || !userInfo.cpf || !totalPontos || totalPontos <= 0) {
+    if (!userInfo || !userInfo.CPF || !totalPontos || totalPontos <= 0) {
       return true; // Não há pontos para remover
     }
 
@@ -145,7 +147,7 @@ const CriarPedidos = () => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          Cliente_CPF: userInfo.cpf,
+          Cliente_CPF: userInfo.CPF,
           Pontos: totalPontos
         }),
       });
@@ -173,6 +175,7 @@ const CriarPedidos = () => {
       if (totalPontos > 0) {
         const pontosRemovidos = await removerPontosUsuario();
         if (!pontosRemovidos) {
+          setLoading(false);
           return;
         }
       }
