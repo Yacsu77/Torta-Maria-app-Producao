@@ -9,7 +9,8 @@ import {
   ScrollView, 
   TextInput,
   Image,
-  Modal
+  Modal,
+  Linking
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import * as Clipboard from 'expo-clipboard';
@@ -169,6 +170,36 @@ const Pagamento = () => {
     return cleaned;
   };
 
+  // Validação reforçada da data do cartão
+  const validateExpiry = (expiry) => {
+    if (!expiry || expiry.length !== 5 || !expiry.includes('/')) {
+      return false;
+    }
+
+    const [month, year] = expiry.split('/');
+    const monthNum = parseInt(month, 10);
+    const yearNum = parseInt(year, 10);
+    const currentYear = new Date().getFullYear() % 100;
+    const currentMonth = new Date().getMonth() + 1;
+
+    // Valida mês (1-12)
+    if (monthNum < 1 || monthNum > 12) {
+      return false;
+    }
+
+    // Valida ano (não pode ser no passado)
+    if (yearNum < currentYear) {
+      return false;
+    }
+
+    // Se for o ano atual, verifica se o mês já passou
+    if (yearNum === currentYear && monthNum < currentMonth) {
+      return false;
+    }
+
+    return true;
+  };
+
   // Validação reforçada
   const validateCard = () => {
     const cardNumber = cardData.number.replace(/\s/g, '');
@@ -178,8 +209,8 @@ const Pagamento = () => {
       return false;
     }
 
-    if (!cardData.expiry || cardData.expiry.length !== 5 || !cardData.expiry.includes('/')) {
-      Alert.alert('Erro', 'Data de expiração inválida (MM/AA)');
+    if (!validateExpiry(cardData.expiry)) {
+      Alert.alert('Erro', 'Data de expiração inválida (MM/AA) ou cartão expirado');
       return false;
     }
 
@@ -243,7 +274,7 @@ const Pagamento = () => {
         throw new Error('Falha ao gerar token do cartão');
       }
 
-      // 2. Processamento do pagamento
+      // 2. Processamento do pagamento com external_reference
       const paymentResponse = await retryRequest(() =>
         api.post('/payments', {
           transaction_amount: parseFloat(valor),
@@ -251,6 +282,7 @@ const Pagamento = () => {
           description: `Pedido #${pedidoId}`,
           installments: 1,
           payment_method_id: 'master',
+          external_reference: `PEDIDO_${pedidoId}_${Date.now()}`, // Adicionado external_reference
           payer: { 
             email: userData?.Email_Cli || 'cliente@email.com',
             first_name: userData?.Nome_Cli?.split(' ')[0] || 'Cliente',
@@ -276,6 +308,7 @@ const Pagamento = () => {
       // LOG IMPORTANTE: Payment ID para validação
       console.log('✅ Payment ID:', paymentResponse.data.id);
       console.log('🔍 Detalhes completos do pagamento:', paymentResponse.data);
+      console.log('🔗 External Reference:', paymentResponse.data.external_reference);
 
       setPaymentId(paymentResponse.data.id);
 
@@ -301,6 +334,7 @@ const Pagamento = () => {
           transaction_amount: parseFloat(valor),
           description: `Pedido #${pedidoId}`,
           payment_method_id: 'pix',
+          external_reference: `PEDIDO_${pedidoId}_${Date.now()}`, // Adicionado external_reference
           payer: { 
             email: userData?.Email_Cli || 'cliente@email.com',
             first_name: userData?.Nome_Cli?.split(' ')[0] || 'Cliente',
@@ -326,6 +360,7 @@ const Pagamento = () => {
       // LOG IMPORTANTE: Payment ID para validação do PIX
       console.log('✅ Payment ID (PIX):', response.data.id);
       console.log('🔍 Detalhes completos do pagamento PIX:', response.data);
+      console.log('🔗 External Reference:', response.data.external_reference);
 
       if (!response.data?.point_of_interaction?.transaction_data) {
         throw new Error('Resposta inválida do Mercado Pago');
