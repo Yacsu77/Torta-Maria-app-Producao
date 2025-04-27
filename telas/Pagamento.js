@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   View, 
   Text, 
@@ -17,6 +17,7 @@ import axios from 'axios';
 import 'react-native-get-random-values';
 import { v4 as uuidv4 } from 'uuid';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Configuração global do axios com interceptors
 const api = axios.create({
@@ -50,33 +51,92 @@ api.interceptors.response.use(
   }
 );
 
+// Credenciais de produção
+const CREDENTIALS = {
+  publicKey: 'APP_USR-bcf0438f-9524-4bbf-8a2a-423783d4b15e',
+  accessToken: 'APP_USR-2586034623043288-041509-64134ab2bdb6a1368766e88f4966e7d8-1047892153',
+  clientId: '2586034623043288',
+  clientSecret: 'ZxdzFsjxxLd0EcxsAedu307KedqnuOps'
+};
+
 const Pagamento = () => {
   const [loading, setLoading] = useState(false);
   const [pixLoading, setPixLoading] = useState(false);
   const [pixData, setPixData] = useState(null);
   const [paymentMethod, setPaymentMethod] = useState('card');
   const [cardData, setCardData] = useState({
-    number: '5031 4332 1540 6351',
-    expiry: '11/25',
-    cvc: '123',
-    name: 'APRO'
+    number: '',
+    expiry: '',
+    cvc: '',
+    name: ''
   });
   const [modalVisible, setModalVisible] = useState(false);
+  const [userData, setUserData] = useState(null);
+  const [paymentStatus, setPaymentStatus] = useState(null);
+  const [paymentId, setPaymentId] = useState(null);
 
   const navigation = useNavigation();
   const route = useRoute();
   const { pedidoId, valor } = route.params || {};
-  
-  // Credenciais de teste
-  const CREDENTIALS = {
-    publicKey: 'TEST-32820278-2ff9-4ec7-9e85-31714fceda78',
-    accessToken: 'TEST-2586034623043288-041509-4d1e325944f5bdaff71e397228fe33e5-1047892153'
-  };
 
-  // Função para fechar o modal e voltar
-  const handleClose = () => {
-    setModalVisible(false);
-    navigation.goBack();
+  // Carrega os dados do usuário ao montar o componente
+  useEffect(() => {
+    const loadUserData = async () => {
+      try {
+        const data = await AsyncStorage.getItem('user');
+        if (data) {
+          const parsedData = JSON.parse(data);
+          setUserData(parsedData);
+          setCardData(prev => ({
+            ...prev,
+            name: parsedData.Nome_Cli || ''
+          }));
+        }
+      } catch (error) {
+        console.log('Erro ao buscar dados do usuário:', error);
+      }
+    };
+
+    loadUserData();
+  }, []);
+
+  // Verifica status do pagamento periodicamente (para PIX)
+  useEffect(() => {
+    let intervalId;
+    
+    if (paymentId && paymentMethod === 'pix') {
+      intervalId = setInterval(() => {
+        checkPaymentStatus(paymentId);
+      }, 10000); // Verifica a cada 10 segundos
+    }
+    
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [paymentId, paymentMethod]);
+
+  // Função para verificar status do pagamento
+  const checkPaymentStatus = async (id) => {
+    try {
+      const response = await api.get(`/payments/${id}`, {
+        headers: {
+          'Authorization': `Bearer ${CREDENTIALS.accessToken}`
+        }
+      });
+
+      console.log('Status do pagamento:', response.data.status);
+      
+      if (response.data.status === 'approved') {
+        setPaymentStatus('approved');
+        handlePaymentApproval();
+        return true;
+      }
+      
+      return false;
+    } catch (error) {
+      console.error('Erro ao verificar status do pagamento:', error);
+      return false;
+    }
   };
 
   // Função para atualizar situação do pedido no banco de dados
@@ -128,6 +188,11 @@ const Pagamento = () => {
       return false;
     }
 
+    if (!cardData.name || cardData.name.length < 3) {
+      Alert.alert('Erro', 'Nome no cartão inválido');
+      return false;
+    }
+
     return true;
   };
 
@@ -163,7 +228,7 @@ const Pagamento = () => {
             name: cardData.name,
             identification: {
               type: 'CPF',
-              number: '12345678909'
+              number: userData?.CPF || '00000000000'
             }
           }
         }, {
@@ -187,12 +252,19 @@ const Pagamento = () => {
           installments: 1,
           payment_method_id: 'master',
           payer: { 
-            email: 'test@test.com',
+            email: userData?.Email_Cli || 'cliente@email.com',
+            first_name: userData?.Nome_Cli?.split(' ')[0] || 'Cliente',
+            last_name: userData?.Nome_Cli?.split(' ').slice(1).join(' ') || 'Teste',
             identification: {
               type: 'CPF',
-              number: '12345678909'
+              number: userData?.CPF || '00000000000'
+            },
+            phone: {
+              area_code: userData?.Celular_Cli?.replace(/\D/g, '').substring(0, 2) || '11',
+              number: userData?.Celular_Cli?.replace(/\D/g, '').substring(2) || '999999999'
             }
-          }
+          },
+          notification_url: 'https://sivpt-betaapi.onrender.com/api/pedido/notificacao'
         }, {
           headers: {
             'Authorization': `Bearer ${CREDENTIALS.accessToken}`,
@@ -201,24 +273,14 @@ const Pagamento = () => {
         })
       );
 
-            // LOG IMPORTANTE: Payment ID para validação
+      // LOG IMPORTANTE: Payment ID para validação
       console.log('✅ Payment ID:', paymentResponse.data.id);
       console.log('🔍 Detalhes completos do pagamento:', paymentResponse.data);
 
+      setPaymentId(paymentResponse.data.id);
+
       if (paymentResponse.data.status === 'approved') {
-        // Atualiza situação do pedido para 2 (aprovado)
-        const atualizado = await atualizarSituacaoPedido(pedidoId, 2);
-        
-        if (atualizado) {
-          setModalVisible(true);
-          setTimeout(() => {
-            setModalVisible(false);
-            navigation.navigate('PedidoConfirmado', { pedidoId });
-          }, 2000);
-        } else {
-          Alert.alert('Atenção', 'Pagamento aprovado, mas houve um problema ao atualizar o pedido. Contate o suporte.');
-          navigation.navigate('PedidoConfirmado', { pedidoId });
-        }
+        handlePaymentApproval();
       } else {
         Alert.alert('Atenção', `Status: ${paymentResponse.data.status || 'Pagamento não concluído'}`);
       }
@@ -240,12 +302,19 @@ const Pagamento = () => {
           description: `Pedido #${pedidoId}`,
           payment_method_id: 'pix',
           payer: { 
-            email: 'test@test.com',
+            email: userData?.Email_Cli || 'cliente@email.com',
+            first_name: userData?.Nome_Cli?.split(' ')[0] || 'Cliente',
+            last_name: userData?.Nome_Cli?.split(' ').slice(1).join(' ') || 'Teste',
             identification: {
               type: 'CPF',
-              number: '12345678909'
+              number: userData?.CPF || '00000000000'
+            },
+            phone: {
+              area_code: userData?.Celular_Cli?.replace(/\D/g, '').substring(0, 2) || '11',
+              number: userData?.Celular_Cli?.replace(/\D/g, '').substring(2) || '999999999'
             }
-          }
+          },
+          notification_url: 'https://sivpt-betaapi.onrender.com/api/pedido/notificacao'
         }, {
           headers: {
             'Authorization': `Bearer ${CREDENTIALS.accessToken}`,
@@ -254,7 +323,7 @@ const Pagamento = () => {
         })
       );
 
-            // LOG IMPORTANTE: Payment ID para validação do PIX
+      // LOG IMPORTANTE: Payment ID para validação do PIX
       console.log('✅ Payment ID (PIX):', response.data.id);
       console.log('🔍 Detalhes completos do pagamento PIX:', response.data);
 
@@ -267,15 +336,29 @@ const Pagamento = () => {
         qrImage: `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${
           encodeURIComponent(response.data.point_of_interaction.transaction_data.qr_code)
         }`,
-        expiration: response.data.point_of_interaction.transaction_data.qr_code_expiration_date
+        expiration: response.data.point_of_interaction.transaction_data.qr_code_expiration_date,
+        ticketUrl: response.data.point_of_interaction.transaction_data.ticket_url
       };
 
       setPixData(pixInfo);
+      setPaymentId(response.data.id);
       setModalVisible(true);
     } catch (error) {
       handlePaymentError(error, 'PIX');
     } finally {
       setPixLoading(false);
+    }
+  };
+
+  // Tratamento quando o pagamento é aprovado
+  const handlePaymentApproval = async () => {
+    // Atualiza situação do pedido para 2 (aprovado)
+    const atualizado = await atualizarSituacaoPedido(pedidoId, 2);
+    
+    if (atualizado) {
+      setModalVisible(true);
+    } else {
+      Alert.alert('Atenção', 'Pagamento aprovado, mas houve um problema ao atualizar o pedido. Contate o suporte.');
     }
   };
 
@@ -309,6 +392,15 @@ const Pagamento = () => {
     } catch (error) {
       console.error('Erro ao copiar:', error);
       Alert.alert('Erro', 'Não foi possível copiar o código');
+    }
+  };
+
+  const openPixInBrowser = () => {
+    if (pixData?.ticketUrl) {
+      Linking.openURL(pixData.ticketUrl).catch(err => {
+        console.error('Erro ao abrir URL:', err);
+        Alert.alert('Erro', 'Não foi possível abrir o link do PIX');
+      });
     }
   };
 
@@ -383,7 +475,7 @@ const Pagamento = () => {
                   secureTextEntry
                   value={cardData.cvc}
                   onChangeText={(text) => setCardData({...cardData, cvc: text.replace(/\D/g, '')})}
-                  maxLength={3}
+                  maxLength={4}
                 />
               </View>
               
@@ -393,10 +485,6 @@ const Pagamento = () => {
                 value={cardData.name}
                 onChangeText={(text) => setCardData({...cardData, name: text})}
               />
-              
-              <Text style={styles.testInfo}>
-                Dados de teste: 5031 4332 1540 6351 | 11/25 | 123
-              </Text>
               
               <TouchableOpacity
                 style={[styles.button, loading && styles.disabledButton]}
@@ -433,9 +521,25 @@ const Pagamento = () => {
                     </TouchableOpacity>
                   </View>
                   
+                  <TouchableOpacity
+                    style={styles.pixLinkButton}
+                    onPress={openPixInBrowser}
+                  >
+                    <Text style={styles.pixLinkButtonText}>Abrir PIX no navegador</Text>
+                  </TouchableOpacity>
+                  
                   <Text style={styles.expirationText}>
                     Válido até: {new Date(pixData.expiration).toLocaleString('pt-BR')}
                   </Text>
+                  
+                  <Text style={styles.pixInstructions}>
+                    Pague usando o QR Code acima ou copie o código e cole no seu aplicativo bancário.
+                  </Text>
+                  
+                  <View style={styles.statusContainer}>
+                    <ActivityIndicator size="small" color="#009ee3" />
+                    <Text style={styles.statusText}>Aguardando confirmação do pagamento...</Text>
+                  </View>
                 </>
               ) : (
                 <>
@@ -466,26 +570,22 @@ const Pagamento = () => {
         animationType="slide"
         transparent={true}
         visible={modalVisible}
-        onRequestClose={handleClose}
+        onRequestClose={() => setModalVisible(false)}
       >
         <View style={styles.modalContainer}>
           <View style={styles.modalContent}>
-            <TouchableOpacity 
-              style={styles.modalCloseButton}
-              onPress={handleClose}
-            >
-              <Ionicons name="close" size={24} color="#2c3e50" />
-            </TouchableOpacity>
-            
             <Ionicons name="checkmark-circle" size={60} color="#27ae60" style={styles.modalIcon} />
             <Text style={styles.modalTitle}>Pagamento Aprovado!</Text>
             <Text style={styles.modalText}>Seu pedido foi confirmado e está sendo processado.</Text>
             
             <TouchableOpacity
               style={styles.modalButton}
-              onPress={handleClose}
+              onPress={() => {
+                setModalVisible(false);
+                navigation.navigate('PedidoConfirmado', { pedidoId });
+              }}
             >
-              <Text style={styles.modalButtonText}>OK</Text>
+              <Text style={styles.modalButtonText}>Ver Pedido</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -493,7 +593,7 @@ const Pagamento = () => {
     </View>
   );
 };
-// Estilos (mantidos iguais como solicitado)
+
 const styles = StyleSheet.create({
   scrollContainer: {
     flexGrow: 1,
@@ -597,12 +697,6 @@ const styles = StyleSheet.create({
   halfInput: {
     width: '48%',
   },
-  testInfo: {
-    fontSize: 12,
-    color: '#95a5a6',
-    marginBottom: 16,
-    textAlign: 'center',
-  },
   button: {
     backgroundColor: '#009ee3',
     padding: 16,
@@ -661,15 +755,41 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     fontSize: 13,
   },
+  pixLinkButton: {
+    backgroundColor: '#f0f0f0',
+    padding: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  pixLinkButtonText: {
+    color: '#009ee3',
+    fontWeight: '500',
+  },
   expirationText: {
     fontSize: 13,
     color: '#e74c3c',
     textAlign: 'center',
+    marginBottom: 8,
+  },
+  pixInstructions: {
+    fontSize: 14,
+    color: '#7f8c8d',
+    textAlign: 'center',
     marginBottom: 16,
   },
-
-
-    closeButton: {
+  statusContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 10,
+  },
+  statusText: {
+    marginLeft: 8,
+    color: '#7f8c8d',
+    fontSize: 14,
+  },
+  closeButton: {
     position: 'absolute',
     top: 10,
     right: 16,
@@ -687,10 +807,6 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     padding: 20,
     alignItems: 'center',
-  },
-  modalCloseButton: {
-    alignSelf: 'flex-end',
-    marginBottom: 10,
   },
   modalIcon: {
     marginBottom: 15,
@@ -719,7 +835,6 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     fontSize: 16,
   },
-
 });
 
 export default Pagamento;
