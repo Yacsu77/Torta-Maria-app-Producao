@@ -7,14 +7,130 @@ export default function Cadastro({ navigation }) {
     celular: '', email: '', senha: '', endereco: '', cep: '', complemento: ''
   });
 
-  const handleChange = (key, value) => setForm({ ...form, [key]: value });
+  const [errors, setErrors] = useState({
+    cpf: null,
+    cep: null
+  });
+  const [touched, setTouched] = useState({
+    cpf: false,
+    cep: false
+  });
+
+  const handleChange = (key, value) => {
+    // Formatação automática do CPF
+    if (key === 'cpf') {
+      value = formatCPF(value);
+      setTouched({...touched, cpf: true});
+      setErrors({...errors, cpf: !validateCPF(value)});
+    }
+    
+    if (key === 'cep') {
+      value = formatCEP(value);
+      setTouched({...touched, cep: true});
+      setErrors({...errors, cep: !validateCEP(value)});
+      
+      // Busca automática quando o CEP está completo
+      if (value.replace(/\D/g, '').length === 8) {
+        fetchCEP(value);
+      }
+    }
+    
+    setForm({ ...form, [key]: value });
+  };
+
+  const formatCPF = (cpf) => {
+    cpf = cpf.replace(/\D/g, '');
+    cpf = cpf.replace(/(\d{3})(\d)/, '$1.$2');
+    cpf = cpf.replace(/(\d{3})(\d)/, '$1.$2');
+    cpf = cpf.replace(/(\d{3})(\d{1,2})$/, '$1-$2');
+    return cpf;
+  };
+
+  const validateCPF = (cpf) => {
+    cpf = cpf.replace(/[^\d]+/g, '');
+    
+    if (cpf.length !== 11 || !!cpf.match(/(\d)\1{10}/)) return false;
+    
+    let soma = 0;
+    let resto;
+    
+    for (let i = 1; i <= 9; i++) {
+      soma = soma + parseInt(cpf.substring(i-1, i)) * (11 - i);
+    }
+    
+    resto = (soma * 10) % 11;
+    
+    if ((resto === 10) || (resto === 11)) resto = 0;
+    if (resto !== parseInt(cpf.substring(9, 10))) return false;
+    
+    soma = 0;
+    for (let i = 1; i <= 10; i++) {
+      soma = soma + parseInt(cpf.substring(i-1, i)) * (12 - i);
+    }
+    
+    resto = (soma * 10) % 11;
+    
+    if ((resto === 10) || (resto === 11)) resto = 0;
+    if (resto !== parseInt(cpf.substring(10, 11))) return false;
+    
+    return true;
+  };
+
+  // Formatação e validação de CEP
+  const formatCEP = (cep) => {
+    cep = cep.replace(/\D/g, '');
+    cep = cep.replace(/^(\d{5})(\d)/, '$1-$2');
+    return cep;
+  };
+
+  const validateCEP = (cep) => {
+    return cep.replace(/\D/g, '').length === 8;
+  };
+
+  // Busca CEP na API ViaCEP
+  const fetchCEP = async (cep) => {
+    try {
+      const cleanedCEP = cep.replace(/\D/g, '');
+      const response = await fetch(`https://viacep.com.br/ws/${cleanedCEP}/json/`);
+      const data = await response.json();
+      
+      if (!data.erro) {
+        setForm(prev => ({
+          ...prev,
+          endereco: data.logradouro || '',
+          complemento: data.complemento || '',
+        }));
+      } else {
+        Alert.alert('CEP não encontrado');
+      }
+    } catch (error) {
+      console.error('Erro ao buscar CEP:', error);
+      Alert.alert('Erro', 'Não foi possível buscar o CEP');
+    }
+  };
 
   const handleCadastro = async () => {
+    // Verifica CPF antes de enviar
+    if (!validateCPF(form.cpf)) {
+      Alert.alert('Erro', 'Por favor, insira um CPF válido');
+      return;
+    }
+
+    if (!validateCEP(form.cep)) {
+      Alert.alert('Erro', 'Por favor, insira um CEP válido');
+      return;
+    }
+
     const res = await fetch('https://sivpt-betaapi.onrender.com/api/users/users/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(form),
+      body: JSON.stringify({
+        ...form,
+        cpf: form.cpf.replace(/[^\d]+/g, ''), // Envia apenas números
+        cep: form.cep.replace(/\D/g, '')
+      }),
     });
+
 
     if (res.status === 200) {
       Alert.alert('Sucesso', 'Cadastro realizado!');
@@ -53,12 +169,17 @@ export default function Cadastro({ navigation }) {
           />
           
           <TextInput 
-            style={styles.input} 
-            placeholder="CPF" 
-            placeholderTextColor="#999"
-            keyboardType="numeric"
-            onChangeText={(v) => handleChange('cpf', v)}
-          />
+  style={[styles.input, touched.cpf && errors.cpf && styles.inputError]} 
+  placeholder="CPF" 
+  placeholderTextColor="#999"
+  keyboardType="numeric"
+  value={form.cpf}
+  maxLength={14}
+  onChangeText={(v) => handleChange('cpf', v)}
+/>
+{touched.cpf && errors.cpf && (
+  <Text style={styles.errorText}>CPF inválido</Text>
+)}
           
           <TextInput 
             style={styles.input} 
@@ -97,12 +218,17 @@ export default function Cadastro({ navigation }) {
           <Text style={styles.sectionTitle}>Endereço</Text>
           
           <TextInput 
-            style={styles.input} 
+            style={[styles.input, touched.cep && errors.cep && styles.inputError]} 
             placeholder="CEP" 
             placeholderTextColor="#999"
             keyboardType="numeric"
+            value={form.cep}
+            maxLength={9}
             onChangeText={(v) => handleChange('cep', v)}
           />
+          {touched.cep && errors.cep && (
+            <Text style={styles.errorText}>CEP inválido</Text>
+          )}
           
           <TextInput 
             style={styles.input} 
@@ -215,5 +341,14 @@ const styles = StyleSheet.create({
   footerLink: {
     color: '#FF9500', // Laranja
     fontWeight: 'bold',
+  },
+  inputError: {
+    borderColor: 'red',
+  },
+  errorText: {
+    color: 'red',
+    marginBottom: 10,
+    marginTop: -5,
+    fontSize: 14,
   },
 });
