@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
-import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { createStackNavigator } from '@react-navigation/stack'; // Alterado para createStackNavigator
 import { getUserData } from './auth';
 
 import TelaInicial from './telas/TelaInicial';
@@ -8,7 +8,7 @@ import Login from './telas/Login';
 import Cadastro from './telas/Cadastro';
 import Menu from './telas/Menu';
 
-const Stack = createNativeStackNavigator();
+const Stack = createStackNavigator(); // Agora usando createStackNavigator
 
 export default function App() {
   const [usuarioLogado, setUsuarioLogado] = useState(null);
