@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, TextInput, Button, Alert, StyleSheet, Text, TouchableOpacity, Image } from 'react-native';
+import { View, TextInput, Alert, StyleSheet, Text, TouchableOpacity, Image, Keyboard, TouchableWithoutFeedback, ImageBackground } from 'react-native';
 import { saveUserData } from '../auth';
 
 export default function Login({ navigation }) {
@@ -23,128 +23,118 @@ export default function Login({ navigation }) {
   };
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <Image 
-          style={styles.logo}
-        />
-        <Text style={styles.title}>Bem-vindo de volta</Text>
-        <Text style={styles.subtitle}>Faça login para continuar</Text>
-      </View>
-      
-      <View style={styles.formContainer}>
-        <TextInput 
-          style={styles.input} 
-          placeholder="Email" 
-          placeholderTextColor="#999"
-          value={email} 
-          onChangeText={setEmail} 
-          keyboardType="email-address"
-          autoCapitalize="none"
-        />
-        
-        <TextInput 
-          style={styles.input} 
-          placeholder="Senha" 
-          placeholderTextColor="#999"
-          secureTextEntry 
-          value={senha} 
-          onChangeText={setSenha} 
-        />
-        
-        <TouchableOpacity style={styles.forgotPassword}>
-          <Text style={styles.forgotPasswordText}>Esqueceu sua senha?</Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity 
-          style={styles.loginButton} 
-          onPress={handleLogin}
-        >
-          <Text style={styles.loginButtonText}>Entrar</Text>
-        </TouchableOpacity>
-      </View>
-      
-      <View style={styles.footer}>
-        <Text style={styles.footerText}>Não tem uma conta?</Text>
-        <TouchableOpacity onPress={() => navigation.navigate('Cadastro')}>
-          <Text style={styles.footerLink}>Cadastre-se</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
+    <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+      <ImageBackground 
+        source={require('../assets/fundo.png')} 
+        style={styles.backgroundImage}
+        resizeMode="cover"
+      >
+        <View style={styles.container}>
+          {/* Logo centralizada */}
+          <Image 
+            source={require('../assets/snack-icon.png')} 
+            style={styles.logo}
+            resizeMode="contain"
+          />
+          
+          {/* Formulário */}
+          <View style={styles.formContainer}>
+            <TextInput 
+              style={styles.input} 
+              placeholder="Email" 
+              placeholderTextColor="#999"
+              value={email} 
+              onChangeText={setEmail} 
+              keyboardType="email-address"
+              autoCapitalize="none"
+            />
+            
+            <TextInput 
+              style={styles.input} 
+              placeholder="Senha" 
+              placeholderTextColor="#999"
+              secureTextEntry 
+              value={senha} 
+              onChangeText={setSenha} 
+            />
+            
+            <TouchableOpacity 
+              style={styles.loginButton} 
+              onPress={handleLogin}
+            >
+              <Text style={styles.loginButtonText}>Entrar</Text>
+            </TouchableOpacity>
+          </View>
+          
+          {/* Rodapé */}
+          <TouchableOpacity 
+            style={styles.registerLink} 
+            onPress={() => navigation.navigate('Cadastro')}
+          >
+            <Text style={styles.registerLinkText}>Não tem uma conta? <Text style={{fontWeight: 'bold'}}>Cadastre-se</Text></Text>
+          </TouchableOpacity>
+        </View>
+      </ImageBackground>
+    </TouchableWithoutFeedback>
   );
 }
 
 const styles = StyleSheet.create({
+  backgroundImage: {
+    flex: 1,
+    width: '100%',
+    height: '100%',
+  },
   container: {
     flex: 1,
-    backgroundColor: '#fff',
     paddingHorizontal: 30,
     justifyContent: 'center',
   },
-  header: {
-    alignItems: 'center',
+  logo: {
+    width: 200,
+    height: 200,
+    alignSelf: 'center',
     marginBottom: 40,
   },
-  logo: {
-    width: 100,
-    height: 100,
-    marginBottom: 20,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 8,
-  },
-  subtitle: {
-    fontSize: 16,
-    color: '#666',
-  },
   formContainer: {
-    marginBottom: 20,
+    width: '100%',
+    backgroundColor: 'rgba(255, 255, 255, 0.7)', // Fundo semi-transparente apenas para o formulário
+    borderRadius: 20,
+    padding: 20,
   },
   input: {
     height: 50,
     borderWidth: 1,
     borderColor: '#ddd',
-    borderRadius: 10,
-    paddingHorizontal: 15,
+    borderRadius: 25,
+    paddingHorizontal: 20,
     marginBottom: 15,
     fontSize: 16,
-    backgroundColor: '#f9f9f9',
-  },
-  forgotPassword: {
-    alignSelf: 'flex-end',
-    marginBottom: 25,
-  },
-  forgotPasswordText: {
-    color: '#FF9500', // Laranja
-    fontSize: 14,
+    backgroundColor: '#FFF',
   },
   loginButton: {
     height: 50,
-    borderRadius: 10,
-    backgroundColor: '#34C759', // Verde
+    borderRadius: 25,
+    backgroundColor: '#FF9500', // Laranja
     justifyContent: 'center',
     alignItems: 'center',
+    marginTop: 20,
     elevation: 3,
   },
   loginButtonText: {
-    color: '#fff',
+    color: '#FFF',
     fontSize: 18,
     fontWeight: 'bold',
   },
-  footer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    marginTop: 20,
+  registerLink: {
+    alignSelf: 'center',
+    marginTop: 30,
+    backgroundColor: 'rgba(255, 255, 255, 0.7)', // Fundo semi-transparente
+    padding: 10,
+    borderRadius: 10,
   },
-  footerText: {
-    color: '#666',
-    marginRight: 5,
-  },
-  footerLink: {
-    color: '#FF9500', // Laranja
-    fontWeight: 'bold',
+  registerLinkText: {
+    color: '#FF9500',
+    fontSize: 14,
   },
 });
