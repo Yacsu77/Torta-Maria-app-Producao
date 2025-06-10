@@ -29,7 +29,7 @@ const Sacola = ({ navigation }) => {
 
       if (secao && secao.id) {
         const response = await fetch(`https://sivpt-betaapi.onrender.com/api/sacola/listar/itens/${secao.id}`);
-        
+       
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
@@ -173,8 +173,9 @@ const Sacola = ({ navigation }) => {
   const renderizarItem = ({ item }) => (
     <View style={styles.itemContainer}>
       <Image 
-        source={{ uri: 'https://via.placeholder.com/100' }} 
+        source={{ uri: item.URL_image || 'https://via.placeholder.com/100' }} 
         style={styles.imagemProduto} 
+        defaultSource={{ uri: 'https://via.placeholder.com/100' }}
       />
       <View style={styles.infoContainer}>
         <Text style={styles.nomeProduto}>{item.nome_produto}</Text>
@@ -215,8 +216,9 @@ const Sacola = ({ navigation }) => {
   const renderizarPromocao = ({ item }) => (
     <View style={styles.promocaoContainer}>
       <Image 
-        source={{ uri: 'https://via.placeholder.com/100' }} 
+        source={{ uri: item.URL_image || 'https://via.placeholder.com/100' }} 
         style={styles.imagemPromocao} 
+        defaultSource={{ uri: 'https://via.placeholder.com/100' }}
       />
       <View style={styles.infoPromocaoContainer}>
         <Text style={styles.nomePromocao}>{item.nome_Promocao}</Text>
@@ -237,7 +239,7 @@ const Sacola = ({ navigation }) => {
     navigation.navigate('CriarPedidos', { 
       total, 
       totalPontos,
-      promocoes // Enviando também a lista de promoções para verificação
+      promocoes
     });
   };
 
@@ -359,12 +361,14 @@ const styles = StyleSheet.create({
     height: 80,
     borderRadius: 8,
     marginRight: 10,
+    resizeMode: 'cover',
   },
   imagemPromocao: {
     width: 80,
     height: 80,
     borderRadius: 8,
     marginRight: 10,
+    resizeMode: 'cover',
   },
   infoContainer: {
     flex: 1,
