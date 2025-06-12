@@ -9,7 +9,9 @@ import {
   TextInput, 
   ScrollView, 
   ActivityIndicator,
-  RefreshControl 
+  RefreshControl,
+  Modal,
+  Dimensions 
 } from 'react-native';
 import { getCurrentSection } from '../auth';
 import axios from 'axios';
@@ -30,6 +32,7 @@ const Produtos = ({ route, navigation }) => {
   const [idSecao, setIdSecao] = useState(null);
   const [lojaSelecionada, setLojaSelecionada] = useState(route.params?.loja || null);
   const [refreshing, setRefreshing] = useState(false);
+  const [showComboModal, setShowComboModal] = useState(false);
 
   // Cores padrão
   const colors = {
@@ -143,7 +146,8 @@ const Produtos = ({ route, navigation }) => {
     const secaoAberta = await verificarSecaoAberta();
     
     if (!secaoAberta) {
-      alert('Nenhuma seção aberta. Por favor, abra uma seção primeiro.');
+      // Abre a tela de abrir seção como modal
+      navigation.navigate('AbrirSeçãoModal');
       return;
     }
 
@@ -166,6 +170,22 @@ const Produtos = ({ route, navigation }) => {
   const onRefresh = () => {
     setRefreshing(true);
     carregarDados();
+  };
+
+  const renderBannerCombo = () => {
+    return (
+      <TouchableOpacity 
+        style={styles.bannerComboContainer}
+        onPress={() => navigation.navigate('Vadecombo')}
+      >
+        <Image 
+          source={require('../assets/Combo.png')} 
+          style={styles.bannerComboImage}
+          resizeMode="contain"
+        />
+        <Text style={styles.bannerComboText}>Va de Combo!</Text>
+      </TouchableOpacity>
+    );
   };
 
   if (loading && !refreshing) {
@@ -192,6 +212,12 @@ const Produtos = ({ route, navigation }) => {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <Image 
+        source={require('../assets/fundo.png')} 
+        style={styles.backgroundImage}
+        resizeMode="cover"
+      />
+      
       {lojaSelecionada && (
         <View style={[styles.lojaInfo, { backgroundColor: colors.primary }]}>
           <Text style={styles.lojaNome}>{lojaSelecionada.nome}</Text>
@@ -266,6 +292,10 @@ const Produtos = ({ route, navigation }) => {
         renderItem={({ item: [categoria, produtosDaCategoria] }) => (
           <View style={styles.categoriaSection}>
             <Text style={[styles.categoriaTitulo, { color: colors.primary }]}>{categoria}</Text>
+            
+            {/* Adiciona o banner de combo antes dos produtos */}
+            {categoriaSelecionada === null && categoria === Object.keys(produtosPorCategoria)[0] && renderBannerCombo()}
+            
             {produtosDaCategoria.map(produto => (
               <TouchableOpacity
                 key={produto.id}
@@ -324,6 +354,12 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     padding: 10,
+  },
+  backgroundImage: {
+    position: 'absolute',
+    width: '100%',
+    height: '100%',
+    opacity: 1,
   },
   loadingContainer: {
     flex: 1,
@@ -399,6 +435,29 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
     marginBottom: 10,
+  },
+  bannerComboContainer: {
+    borderRadius: 8,
+    marginBottom: 15,
+    alignItems: 'center',
+    padding: 10,
+    backgroundColor: '#fff',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  bannerComboImage: {
+    width: '100%',
+    height: 150,
+    borderRadius: 8,
+    marginBottom: 10,
+  },
+  bannerComboText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#e67e22',
   },
   produtoCard: {
     borderRadius: 8,

@@ -17,6 +17,7 @@ import Pagamento from './Pagamento';
 import ConfirmacaoPagamentos from './ConfirmacaoPagamento';
 import DetalhesProntos from './DetalhesProntos';
 import DetalheProduto from './DetalheProduto';
+import Vadecombo from './Vadecombo';
 
 const Tab = createBottomTabNavigator();
 const RootStack = createStackNavigator();
@@ -182,6 +183,16 @@ export default function Menu() {
         <RootStack.Screen
           name="DetalheProduto"
           component={DetalheProduto}
+          options={{ 
+            headerShown: false,
+            cardOverlayEnabled: true,
+            cardStyle: { backgroundColor: 'rgba(0,0,0,0.5)' },
+          }}
+        />
+
+        <RootStack.Screen
+          name="Vadecombo"
+          component={Vadecombo}
           options={{ 
             headerShown: false,
             cardOverlayEnabled: true,
