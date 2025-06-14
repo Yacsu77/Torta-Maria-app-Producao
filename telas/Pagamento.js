@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   View, 
   Text, 
@@ -11,7 +11,8 @@ import {
   Image,
   Modal,
   Linking,
-  Platform
+  Platform,
+  KeyboardAvoidingView
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import * as Clipboard from 'expo-clipboard';
@@ -22,32 +23,26 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { CardField, useConfirmPayment } from '@stripe/stripe-react-native';
 
-// Configuração global do axios com interceptors
+// Configuração global do axios
 const api = axios.create({
   baseURL: 'https://api.mercadopago.com/v1',
   timeout: 30000,
   headers: {
     'Content-Type': 'application/json',
-    'Accept': 'application/json',
-    'User-Agent': 'ReactNative/1.0'
+    'Accept': 'application/json'
   }
 });
 
-// API para atualizar situação do pedido
 const apiPedidos = axios.create({
   baseURL: 'https://sivpt-betaapi.onrender.com/api',
   timeout: 30000,
 });
 
-// Credenciais de produção
 const CREDENTIALS = {
   publicKey: 'APP_USR-bcf0438f-9524-4bbf-8a2a-423783d4b15e',
-  accessToken: 'APP_USR-2586034623043288-041509-64134ab2bdb6a1368766e88f4966e7d8-1047892153',
-  clientId: '2586034623043288',
-  clientSecret: 'ZxdzFsjxxLd0EcxsAedu307KedqnuOps'
+  accessToken: 'APP_USR-2586034623043288-041509-64134ab2bdb6a1368766e88f4966e7d8-1047892153'
 };
 
-// Paleta de cores do app (laranja e verde)
 const COLORS = {
   primary: '#FF7F00',
   secondary: '#4CAF50',
@@ -61,6 +56,19 @@ const COLORS = {
   warning: '#F39C12'
 };
 
+// Mapeamento completo de bandeiras de cartão com seus payment_method_id correspondentes
+const CARD_BRANDS = {
+  visa: { name: 'Visa', paymentMethodId: 'visa' },
+  mastercard: { name: 'Mastercard', paymentMethodId: 'master' },
+  amex: { name: 'American Express', paymentMethodId: 'amex' },
+  diners: { name: 'Diners Club', paymentMethodId: 'diners' },
+  elo: { name: 'Elo', paymentMethodId: 'elo' },
+  hipercard: { name: 'Hipercard', paymentMethodId: 'hipercard' },
+  discover: { name: 'Discover', paymentMethodId: 'discover' },
+  jcb: { name: 'JCB', paymentMethodId: 'jcb' },
+  aura: { name: 'Aura', paymentMethodId: 'aura' }
+};
+
 const Pagamento = () => {
   const [loading, setLoading] = useState(false);
   const [pixLoading, setPixLoading] = useState(false);
@@ -70,14 +78,15 @@ const Pagamento = () => {
     number: '',
     expiry: '',
     cvc: '',
-    name: ''
+    name: '',
+    brand: ''
   });
   const [modalVisible, setModalVisible] = useState(false);
   const [userData, setUserData] = useState(null);
   const [paymentStatus, setPaymentStatus] = useState(null);
   const [paymentId, setPaymentId] = useState(null);
-  const [deviceId, setDeviceId] = useState(null);
   const [cardComplete, setCardComplete] = useState(false);
+  const scrollViewRef = useRef();
 
   const navigation = useNavigation();
   const route = useRoute();
@@ -95,10 +104,6 @@ const Pagamento = () => {
             name: parsedData.Nome_Cli || ''
           }));
         }
-        
-        const deviceId = uuidv4();
-        setDeviceId(deviceId);
-        
       } catch (error) {
         console.log('Erro ao buscar dados do usuário:', error);
       }
@@ -167,6 +172,11 @@ const Pagamento = () => {
       return false;
     }
 
+    if (!cardData.brand) {
+      Alert.alert('Erro', 'Bandeira do cartão não reconhecida');
+      return false;
+    }
+
     return true;
   };
 
@@ -189,19 +199,16 @@ const Pagamento = () => {
       // 1. Tokenização do cartão
       const tokenResponse = await retryRequest(() => 
         api.post('/card_tokens', {
-          card_number: cardData.number.replace(/\s/g, ''),
-          expiration_month: cardData.expiry.split('/')[0].padStart(2, '0'),
-          expiration_year: `20${cardData.expiry.split('/')[1]}`,
-          security_code: cardData.cvc,
+          card_number: cardData.number?.replace(/\s/g, '') || '',
+          expiration_month: cardData.expiry?.split('/')[0]?.padStart(2, '0') || '',
+          expiration_year: `20${cardData.expiry?.split('/')[1] || ''}`,
+          security_code: cardData.cvc || '',
           cardholder: { 
-            name: cardData.name,
+            name: cardData.name || '',
             identification: {
               type: 'CPF',
               number: userData?.CPF || '00000000000'
             }
-          },
-          device: {
-            fingerprint: deviceId
           }
         }, {
           headers: {
@@ -215,6 +222,8 @@ const Pagamento = () => {
         throw new Error('Falha ao gerar token do cartão');
       }
 
+      console.log('Token do cartão gerado com sucesso:', tokenResponse.data.id);
+
       // 2. Processamento do pagamento
       const paymentResponse = await retryRequest(() =>
         api.post('/payments', {
@@ -222,7 +231,7 @@ const Pagamento = () => {
           token: tokenResponse.data.id,
           description: `Pedido #${pedidoId}`,
           installments: 1,
-          payment_method_id: 'visa',
+          payment_method_id: CARD_BRANDS[cardData.brand]?.paymentMethodId,
           payer: { 
             email: userData?.Email_Cli || 'cliente@email.com',
             first_name: userData?.Nome_Cli?.split(' ')[0] || 'Cliente',
@@ -240,7 +249,7 @@ const Pagamento = () => {
         })
       );
 
-      console.log('Payment ID:', paymentResponse.data.id);
+      console.log('✅ Payment ID:', paymentResponse.data.id);
       setPaymentId(paymentResponse.data.id);
 
       if (paymentResponse.data.status === 'approved') {
@@ -250,7 +259,12 @@ const Pagamento = () => {
       }
     } catch (error) {
       console.error('Erro no pagamento com cartão:', error.response?.data || error.message);
-      Alert.alert('Erro', 'Não foi possível processar o pagamento. Verifique os dados do cartão e tente novamente.');
+      Alert.alert(
+        'Erro no pagamento', 
+        error.response?.data?.message || 
+        error.response?.data?.cause?.[0]?.description || 
+        'Não foi possível processar o pagamento. Verifique os dados do cartão e tente novamente.'
+      );
     } finally {
       setLoading(false);
     }
@@ -336,19 +350,55 @@ const Pagamento = () => {
 
   const handleCardChange = (cardDetails) => {
     setCardComplete(cardDetails.complete);
-    if (cardDetails.complete) {
-      setCardData({
-        number: cardDetails.number,
-        expiry: `${cardDetails.expiryMonth}/${cardDetails.expiryYear.toString().slice(-2)}`,
-        cvc: cardDetails.cvc,
-        name: cardData.name
-      });
+    setCardData({
+      number: cardDetails.number,
+      expiry: `${cardDetails.expiryMonth}/${cardDetails.expiryYear.toString().slice(-2)}`,
+      cvc: cardDetails.cvc,
+      name: cardData.name,
+      brand: cardDetails.brand || ''
+    });
+  };
+
+  const handleNameChange = (text) => {
+    setCardData({
+      ...cardData,
+      name: text
+    });
+  };
+
+  const formatCardNumber = (number) => {
+    if (!number) return '•••• •••• •••• ••••';
+    const cleaned = number.replace(/\s+/g, '');
+    const parts = [];
+    for (let i = 0; i < cleaned.length; i += 4) {
+      parts.push(cleaned.substr(i, 4));
     }
+    return parts.join(' ');
+  };
+
+  const formatExpiry = (expiry) => {
+    if (!expiry) return '••/••';
+    return expiry;
+  };
+
+  const getCardBrandName = (brand) => {
+    return CARD_BRANDS[brand]?.name || '••••••••';
+  };
+
+  const handleInputFocus = () => {
+    scrollViewRef.current?.scrollTo({ y: 200, animated: true });
   };
 
   return (
-    <View style={{ flex: 1, backgroundColor: COLORS.background }}>
-      <ScrollView contentContainerStyle={styles.scrollContainer}>
+    <KeyboardAvoidingView 
+      style={{ flex: 1 }}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    >
+      <ScrollView 
+        ref={scrollViewRef}
+        contentContainerStyle={styles.scrollContainer}
+        keyboardShouldPersistTaps="handled"
+      >
         <View style={styles.container}>
           <View style={styles.header}>
             <TouchableOpacity 
@@ -391,6 +441,35 @@ const Pagamento = () => {
             <View style={styles.form}>
               <Text style={styles.sectionTitle}>Dados do Cartão</Text>
               
+              {/* Cartão visual */}
+              <View style={styles.cardVisual}>
+                <View style={styles.cardHeader}>
+                  <Text style={styles.cardBrand}>
+                    {getCardBrandName(cardData.brand)}
+                  </Text>
+                  <Text style={styles.cardType}>Crédito</Text>
+                </View>
+                <View style={styles.cardNumberContainer}>
+                  <Text style={styles.cardNumber}>
+                    {formatCardNumber(cardData.number)}
+                  </Text>
+                </View>
+                <View style={styles.cardFooter}>
+                  <View>
+                    <Text style={styles.cardLabel}>Titular</Text>
+                    <Text style={styles.cardName}>
+                      {cardData.name || '••••••••••••'}
+                    </Text>
+                  </View>
+                  <View>
+                    <Text style={styles.cardLabel}>Validade</Text>
+                    <Text style={styles.cardExpiry}>
+                      {formatExpiry(cardData.expiry)}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+              
               <View style={styles.cardFieldContainer}>
                 <CardField
                   postalCodeEnabled={false}
@@ -402,6 +481,7 @@ const Pagamento = () => {
                   cardStyle={styles.cardField}
                   style={styles.cardFieldStyle}
                   onCardChange={handleCardChange}
+                  onFocus={handleInputFocus}
                 />
               </View>
               
@@ -409,7 +489,8 @@ const Pagamento = () => {
                 style={styles.input}
                 placeholder="Nome no Cartão"
                 value={cardData.name}
-                onChangeText={(text) => setCardData({...cardData, name: text})}
+                onChangeText={handleNameChange}
+                onFocus={handleInputFocus}
               />
               
               <TouchableOpacity
@@ -520,7 +601,7 @@ const Pagamento = () => {
           </View>
         </View>
       </Modal>
-    </View>
+    </KeyboardAvoidingView>
   );
 };
 
@@ -618,6 +699,67 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginBottom: 16,
     color: '#333333',
+  },
+  cardVisual: {
+    backgroundColor: '#FF7F00',
+    borderRadius: 12,
+    padding: 20,
+    marginBottom: 20,
+    height: 200,
+    justifyContent: 'space-between',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    elevation: 5,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  cardBrand: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  cardType: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+  },
+  cardNumberContainer: {
+    alignItems: 'center',
+    marginVertical: 15,
+  },
+  cardNumber: {
+    color: '#FFFFFF',
+    fontSize: 22,
+    letterSpacing: 2,
+    fontWeight: 'bold',
+  },
+  cardFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  cardLabel: {
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: 12,
+    marginBottom: 4,
+  },
+  cardName: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '500',
+    maxWidth: 180,
+  },
+  cardExpiry: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '500',
   },
   cardFieldContainer: {
     height: 50,
