@@ -10,7 +10,8 @@ import {
   TextInput,
   Image,
   Modal,
-  Linking
+  Linking,
+  Platform
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import * as Clipboard from 'expo-clipboard';
@@ -19,6 +20,7 @@ import 'react-native-get-random-values';
 import { v4 as uuidv4 } from 'uuid';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { CardField, useConfirmPayment } from '@stripe/stripe-react-native';
 
 // Configuração global do axios com interceptors
 const api = axios.create({
@@ -37,27 +39,26 @@ const apiPedidos = axios.create({
   timeout: 30000,
 });
 
-// Interceptor para tratamento global de erros
-api.interceptors.response.use(
-  response => response,
-  error => {
-    console.error('Erro na requisição:', {
-      url: error.config?.url,
-      method: error.config?.method,
-      status: error.response?.status,
-      data: error.response?.data,
-      message: error.message
-    });
-    return Promise.reject(error);
-  }
-);
-
 // Credenciais de produção
 const CREDENTIALS = {
   publicKey: 'APP_USR-bcf0438f-9524-4bbf-8a2a-423783d4b15e',
   accessToken: 'APP_USR-2586034623043288-041509-64134ab2bdb6a1368766e88f4966e7d8-1047892153',
   clientId: '2586034623043288',
   clientSecret: 'ZxdzFsjxxLd0EcxsAedu307KedqnuOps'
+};
+
+// Paleta de cores do app (laranja e verde)
+const COLORS = {
+  primary: '#FF7F00',
+  secondary: '#4CAF50',
+  background: '#F5F5F5',
+  text: '#333333',
+  lightText: '#777777',
+  white: '#FFFFFF',
+  border: '#E0E0E0',
+  error: '#E74C3C',
+  success: '#27AE60',
+  warning: '#F39C12'
 };
 
 const Pagamento = () => {
@@ -75,12 +76,13 @@ const Pagamento = () => {
   const [userData, setUserData] = useState(null);
   const [paymentStatus, setPaymentStatus] = useState(null);
   const [paymentId, setPaymentId] = useState(null);
+  const [deviceId, setDeviceId] = useState(null);
+  const [cardComplete, setCardComplete] = useState(false);
 
   const navigation = useNavigation();
   const route = useRoute();
-  const { pedidoId, valor } = route.params || {};
+  const { pedidoId, valor, items } = route.params || {};
 
-  // Carrega os dados do usuário ao montar o componente
   useEffect(() => {
     const loadUserData = async () => {
       try {
@@ -93,6 +95,10 @@ const Pagamento = () => {
             name: parsedData.Nome_Cli || ''
           }));
         }
+        
+        const deviceId = uuidv4();
+        setDeviceId(deviceId);
+        
       } catch (error) {
         console.log('Erro ao buscar dados do usuário:', error);
       }
@@ -101,14 +107,13 @@ const Pagamento = () => {
     loadUserData();
   }, []);
 
-  // Verifica status do pagamento periodicamente (para PIX)
   useEffect(() => {
     let intervalId;
     
     if (paymentId && paymentMethod === 'pix') {
       intervalId = setInterval(() => {
         checkPaymentStatus(paymentId);
-      }, 10000); // Verifica a cada 10 segundos
+      }, 10000);
     }
     
     return () => {
@@ -116,7 +121,6 @@ const Pagamento = () => {
     };
   }, [paymentId, paymentMethod]);
 
-  // Função para verificar status do pagamento
   const checkPaymentStatus = async (id) => {
     try {
       const response = await api.get(`/payments/${id}`, {
@@ -124,8 +128,6 @@ const Pagamento = () => {
           'Authorization': `Bearer ${CREDENTIALS.accessToken}`
         }
       });
-
-      console.log('Status do pagamento:', response.data.status);
       
       if (response.data.status === 'approved') {
         setPaymentStatus('approved');
@@ -140,7 +142,6 @@ const Pagamento = () => {
     }
   };
 
-  // Função para atualizar situação do pedido no banco de dados
   const atualizarSituacaoPedido = async (pedidoId, situacao) => {
     try {
       const response = await apiPedidos.put(`/pedido/atualizar-situacao/${pedidoId}`, {
@@ -155,67 +156,9 @@ const Pagamento = () => {
     }
   };
 
-  // Formatação dos campos
-  const formatCardNumber = (text) => {
-    const cleaned = text.replace(/\D/g, '');
-    const match = cleaned.match(/(\d{0,4})(\d{0,4})(\d{0,4})(\d{0,4})/);
-    return match ? `${match[1]} ${match[2]} ${match[3]} ${match[4]}`.trim() : cleaned;
-  };
-
-  const formatExpiry = (text) => {
-    const cleaned = text.replace(/\D/g, '');
-    if (cleaned.length >= 3) {
-      return `${cleaned.slice(0, 2)}/${cleaned.slice(2, 4)}`;
-    }
-    return cleaned;
-  };
-
-  // Validação reforçada da data do cartão
-  const validateExpiry = (expiry) => {
-    if (!expiry || expiry.length !== 5 || !expiry.includes('/')) {
-      return false;
-    }
-
-    const [month, year] = expiry.split('/');
-    const monthNum = parseInt(month, 10);
-    const yearNum = parseInt(year, 10);
-    const currentYear = new Date().getFullYear() % 100;
-    const currentMonth = new Date().getMonth() + 1;
-
-    // Valida mês (1-12)
-    if (monthNum < 1 || monthNum > 12) {
-      return false;
-    }
-
-    // Valida ano (não pode ser no passado)
-    if (yearNum < currentYear) {
-      return false;
-    }
-
-    // Se for o ano atual, verifica se o mês já passou
-    if (yearNum === currentYear && monthNum < currentMonth) {
-      return false;
-    }
-
-    return true;
-  };
-
-  // Validação reforçada
   const validateCard = () => {
-    const cardNumber = cardData.number.replace(/\s/g, '');
-    
-    if (!cardNumber || cardNumber.length !== 16 || !/^\d+$/.test(cardNumber)) {
-      Alert.alert('Erro', 'Número do cartão inválido');
-      return false;
-    }
-
-    if (!validateExpiry(cardData.expiry)) {
-      Alert.alert('Erro', 'Data de expiração inválida (MM/AA) ou cartão expirado');
-      return false;
-    }
-
-    if (!cardData.cvc || cardData.cvc.length < 3 || !/^\d+$/.test(cardData.cvc)) {
-      Alert.alert('Erro', 'Código de segurança inválido');
+    if (!cardComplete) {
+      Alert.alert('Erro', 'Por favor, preencha todos os dados do cartão corretamente');
       return false;
     }
 
@@ -227,7 +170,6 @@ const Pagamento = () => {
     return true;
   };
 
-  // Função para tentar novamente uma requisição
   const retryRequest = async (requestFn, retries = 3, delay = 1000) => {
     try {
       return await requestFn();
@@ -238,22 +180,18 @@ const Pagamento = () => {
     }
   };
 
-  // Processamento de pagamento com cartão
   const handleCardPayment = async () => {
     if (!validateCard()) return;
 
     setLoading(true);
 
     try {
-      const [month, year] = cardData.expiry.split('/');
-      const expiryYear = `20${year}`;
-
       // 1. Tokenização do cartão
       const tokenResponse = await retryRequest(() => 
         api.post('/card_tokens', {
           card_number: cardData.number.replace(/\s/g, ''),
-          expiration_month: month.padStart(2, '0'),
-          expiration_year: expiryYear,
+          expiration_month: cardData.expiry.split('/')[0].padStart(2, '0'),
+          expiration_year: `20${cardData.expiry.split('/')[1]}`,
           security_code: cardData.cvc,
           cardholder: { 
             name: cardData.name,
@@ -261,6 +199,9 @@ const Pagamento = () => {
               type: 'CPF',
               number: userData?.CPF || '00000000000'
             }
+          },
+          device: {
+            fingerprint: deviceId
           }
         }, {
           headers: {
@@ -274,15 +215,14 @@ const Pagamento = () => {
         throw new Error('Falha ao gerar token do cartão');
       }
 
-      // 2. Processamento do pagamento com external_reference
+      // 2. Processamento do pagamento
       const paymentResponse = await retryRequest(() =>
         api.post('/payments', {
           transaction_amount: parseFloat(valor),
           token: tokenResponse.data.id,
           description: `Pedido #${pedidoId}`,
           installments: 1,
-          payment_method_id: 'master',
-          external_reference: `PEDIDO_${pedidoId}_${Date.now()}`, // Adicionado external_reference
+          payment_method_id: 'visa',
           payer: { 
             email: userData?.Email_Cli || 'cliente@email.com',
             first_name: userData?.Nome_Cli?.split(' ')[0] || 'Cliente',
@@ -290,13 +230,8 @@ const Pagamento = () => {
             identification: {
               type: 'CPF',
               number: userData?.CPF || '00000000000'
-            },
-            phone: {
-              area_code: userData?.Celular_Cli?.replace(/\D/g, '').substring(0, 2) || '11',
-              number: userData?.Celular_Cli?.replace(/\D/g, '').substring(2) || '999999999'
             }
-          },
-          notification_url: 'https://sivpt-betaapi.onrender.com/api/pedido/notificacao'
+          }
         }, {
           headers: {
             'Authorization': `Bearer ${CREDENTIALS.accessToken}`,
@@ -305,11 +240,7 @@ const Pagamento = () => {
         })
       );
 
-      // LOG IMPORTANTE: Payment ID para validação
-      console.log('✅ Payment ID:', paymentResponse.data.id);
-      console.log('🔍 Detalhes completos do pagamento:', paymentResponse.data);
-      console.log('🔗 External Reference:', paymentResponse.data.external_reference);
-
+      console.log('Payment ID:', paymentResponse.data.id);
       setPaymentId(paymentResponse.data.id);
 
       if (paymentResponse.data.status === 'approved') {
@@ -318,13 +249,13 @@ const Pagamento = () => {
         Alert.alert('Atenção', `Status: ${paymentResponse.data.status || 'Pagamento não concluído'}`);
       }
     } catch (error) {
-      handlePaymentError(error, 'cartão');
+      console.error('Erro no pagamento com cartão:', error.response?.data || error.message);
+      Alert.alert('Erro', 'Não foi possível processar o pagamento. Verifique os dados do cartão e tente novamente.');
     } finally {
       setLoading(false);
     }
   };
 
-  // Processamento de PIX
   const handlePixPayment = async () => {
     setPixLoading(true);
 
@@ -334,7 +265,6 @@ const Pagamento = () => {
           transaction_amount: parseFloat(valor),
           description: `Pedido #${pedidoId}`,
           payment_method_id: 'pix',
-          external_reference: `PEDIDO_${pedidoId}_${Date.now()}`, // Adicionado external_reference
           payer: { 
             email: userData?.Email_Cli || 'cliente@email.com',
             first_name: userData?.Nome_Cli?.split(' ')[0] || 'Cliente',
@@ -342,13 +272,8 @@ const Pagamento = () => {
             identification: {
               type: 'CPF',
               number: userData?.CPF || '00000000000'
-            },
-            phone: {
-              area_code: userData?.Celular_Cli?.replace(/\D/g, '').substring(0, 2) || '11',
-              number: userData?.Celular_Cli?.replace(/\D/g, '').substring(2) || '999999999'
             }
-          },
-          notification_url: 'https://sivpt-betaapi.onrender.com/api/pedido/notificacao'
+          }
         }, {
           headers: {
             'Authorization': `Bearer ${CREDENTIALS.accessToken}`,
@@ -357,18 +282,13 @@ const Pagamento = () => {
         })
       );
 
-      // LOG IMPORTANTE: Payment ID para validação do PIX
-      console.log('✅ Payment ID (PIX):', response.data.id);
-      console.log('🔍 Detalhes completos do pagamento PIX:', response.data);
-      console.log('🔗 External Reference:', response.data.external_reference);
-
       if (!response.data?.point_of_interaction?.transaction_data) {
         throw new Error('Resposta inválida do Mercado Pago');
       }
 
       const pixInfo = {
         qrCode: response.data.point_of_interaction.transaction_data.qr_code,
-        qrImage: `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${
+        qrImage: `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${
           encodeURIComponent(response.data.point_of_interaction.transaction_data.qr_code)
         }`,
         expiration: response.data.point_of_interaction.transaction_data.qr_code_expiration_date,
@@ -379,15 +299,14 @@ const Pagamento = () => {
       setPaymentId(response.data.id);
       setModalVisible(true);
     } catch (error) {
-      handlePaymentError(error, 'PIX');
+      console.error('Erro no PIX:', error.response?.data || error.message);
+      Alert.alert('Erro', 'Não foi possível gerar o PIX. Tente novamente mais tarde.');
     } finally {
       setPixLoading(false);
     }
   };
 
-  // Tratamento quando o pagamento é aprovado
   const handlePaymentApproval = async () => {
-    // Atualiza situação do pedido para 2 (aprovado)
     const atualizado = await atualizarSituacaoPedido(pedidoId, 2);
     
     if (atualizado) {
@@ -395,29 +314,6 @@ const Pagamento = () => {
     } else {
       Alert.alert('Atenção', 'Pagamento aprovado, mas houve um problema ao atualizar o pedido. Contate o suporte.');
     }
-  };
-
-  // Tratamento centralizado de erros
-  const handlePaymentError = (error, paymentType) => {
-    console.error(`Erro no ${paymentType}:`, {
-      message: error.message,
-      response: error.response?.data,
-      stack: error.stack
-    });
-
-    let errorMessage = `Erro ao processar ${paymentType}`;
-    
-    if (error.response?.status === 500) {
-      errorMessage = 'Erro interno no servidor do Mercado Pago. Por favor, tente novamente mais tarde.';
-    } else if (error.code === 'ECONNABORTED') {
-      errorMessage = 'Tempo de conexão esgotado. Verifique sua internet e tente novamente.';
-    } else if (error.response?.data?.message) {
-      errorMessage = error.response.data.message;
-    } else if (error.response?.data?.cause?.[0]?.description) {
-      errorMessage = error.response.data.cause[0].description;
-    }
-
-    Alert.alert('Erro', errorMessage);
   };
 
   const copyToClipboard = async (text) => {
@@ -433,27 +329,37 @@ const Pagamento = () => {
   const openPixInBrowser = () => {
     if (pixData?.ticketUrl) {
       Linking.openURL(pixData.ticketUrl).catch(err => {
-        console.error('Erro ao abrir URL:', err);
         Alert.alert('Erro', 'Não foi possível abrir o link do PIX');
       });
     }
   };
 
+  const handleCardChange = (cardDetails) => {
+    setCardComplete(cardDetails.complete);
+    if (cardDetails.complete) {
+      setCardData({
+        number: cardDetails.number,
+        expiry: `${cardDetails.expiryMonth}/${cardDetails.expiryYear.toString().slice(-2)}`,
+        cvc: cardDetails.cvc,
+        name: cardData.name
+      });
+    }
+  };
+
   return (
-    <View style={{ flex: 1 }}>
+    <View style={{ flex: 1, backgroundColor: COLORS.background }}>
       <ScrollView contentContainerStyle={styles.scrollContainer}>
         <View style={styles.container}>
-          {/* Botão de fechar no cabeçalho */}
-          <TouchableOpacity 
-            style={styles.closeButton}
-            onPress={() => navigation.goBack()}
-          >
-            <Ionicons name="close" size={24} color="#2c3e50" />
-          </TouchableOpacity>
+          <View style={styles.header}>
+            <TouchableOpacity 
+              style={styles.closeButton}
+              onPress={() => navigation.goBack()}
+            >
+              <Ionicons name="close" size={24} color={COLORS.text} />
+            </TouchableOpacity>
+            <Text style={styles.title}>Finalizar Pagamento</Text>
+          </View>
           
-          <Text style={styles.title}>Finalizar Pagamento</Text>
-          
-          {/* Resumo do pedido */}
           <View style={styles.summaryCard}>
             <Text style={styles.summaryTitle}>Resumo do Pedido</Text>
             <View style={styles.summaryRow}>
@@ -466,7 +372,6 @@ const Pagamento = () => {
             </View>
           </View>
 
-          {/* Seletor de método de pagamento */}
           <View style={styles.tabs}>
             <TouchableOpacity
               style={[styles.tab, paymentMethod === 'card' && styles.activeTab]}
@@ -486,31 +391,17 @@ const Pagamento = () => {
             <View style={styles.form}>
               <Text style={styles.sectionTitle}>Dados do Cartão</Text>
               
-              <TextInput
-                style={styles.input}
-                placeholder="Número do Cartão"
-                keyboardType="numeric"
-                value={formatCardNumber(cardData.number)}
-                onChangeText={(text) => setCardData({...cardData, number: text.replace(/\s/g, '')})}
-                maxLength={19}
-              />
-              
-              <View style={styles.row}>
-                <TextInput
-                  style={[styles.input, styles.halfInput]}
-                  placeholder="MM/AA"
-                  value={formatExpiry(cardData.expiry)}
-                  onChangeText={(text) => setCardData({...cardData, expiry: text.replace(/\D/g, '')})}
-                  maxLength={5}
-                />
-                <TextInput
-                  style={[styles.input, styles.halfInput]}
-                  placeholder="CVV"
-                  keyboardType="numeric"
-                  secureTextEntry
-                  value={cardData.cvc}
-                  onChangeText={(text) => setCardData({...cardData, cvc: text.replace(/\D/g, '')})}
-                  maxLength={4}
+              <View style={styles.cardFieldContainer}>
+                <CardField
+                  postalCodeEnabled={false}
+                  placeholders={{
+                    number: '4242 4242 4242 4242',
+                    expiration: 'MM/AA',
+                    cvc: 'CVC'
+                  }}
+                  cardStyle={styles.cardField}
+                  style={styles.cardFieldStyle}
+                  onCardChange={handleCardChange}
                 />
               </View>
               
@@ -522,16 +413,21 @@ const Pagamento = () => {
               />
               
               <TouchableOpacity
-                style={[styles.button, loading && styles.disabledButton]}
+                style={[styles.button, (loading || !cardComplete) && styles.disabledButton]}
                 onPress={handleCardPayment}
-                disabled={loading}
+                disabled={loading || !cardComplete}
               >
                 {loading ? (
-                  <ActivityIndicator color="#fff" />
+                  <ActivityIndicator color={COLORS.white} />
                 ) : (
                   <Text style={styles.buttonText}>Pagar com Cartão</Text>
                 )}
               </TouchableOpacity>
+              
+              <View style={styles.securityInfo}>
+                <Ionicons name="lock-closed" size={16} color={COLORS.secondary} />
+                <Text style={styles.securityText}>Pagamento seguro com criptografia</Text>
+              </View>
             </View>
           ) : (
             <View style={styles.pixContainer}>
@@ -572,7 +468,7 @@ const Pagamento = () => {
                   </Text>
                   
                   <View style={styles.statusContainer}>
-                    <ActivityIndicator size="small" color="#009ee3" />
+                    <ActivityIndicator size="small" color={COLORS.primary} />
                     <Text style={styles.statusText}>Aguardando confirmação do pagamento...</Text>
                   </View>
                 </>
@@ -588,7 +484,7 @@ const Pagamento = () => {
                     disabled={pixLoading}
                   >
                     {pixLoading ? (
-                      <ActivityIndicator color="#fff" />
+                      <ActivityIndicator color={COLORS.white} />
                     ) : (
                       <Text style={styles.buttonText}>Gerar Código PIX</Text>
                     )}
@@ -600,7 +496,6 @@ const Pagamento = () => {
         </View>
       </ScrollView>
 
-      {/* Modal de sucesso */}
       <Modal
         animationType="slide"
         transparent={true}
@@ -609,7 +504,7 @@ const Pagamento = () => {
       >
         <View style={styles.modalContainer}>
           <View style={styles.modalContent}>
-            <Ionicons name="checkmark-circle" size={60} color="#27ae60" style={styles.modalIcon} />
+            <Ionicons name="checkmark-circle" size={60} color={COLORS.success} style={styles.modalIcon} />
             <Text style={styles.modalTitle}>Pagamento Aprovado!</Text>
             <Text style={styles.modalText}>Seu pedido foi confirmado e está sendo processado.</Text>
             
@@ -636,19 +531,27 @@ const styles = StyleSheet.create({
   },
   container: {
     flex: 1,
-    padding: 16,
-    backgroundColor: '#f8f9fa',
+    padding: 20,
+    backgroundColor: '#F5F5F5',
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  closeButton: {
+    marginRight: 10,
   },
   title: {
     fontSize: 22,
     fontWeight: 'bold',
-    marginBottom: 20,
+    color: '#333333',
+    flex: 1,
     textAlign: 'center',
-    color: '#2c3e50',
   },
   summaryCard: {
-    backgroundColor: '#fff',
-    borderRadius: 10,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
     padding: 16,
     marginBottom: 20,
     shadowColor: '#000',
@@ -661,7 +564,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
     marginBottom: 12,
-    color: '#34495e',
+    color: '#333333',
   },
   summaryRow: {
     flexDirection: 'row',
@@ -670,26 +573,26 @@ const styles = StyleSheet.create({
   },
   summaryLabel: {
     fontSize: 15,
-    color: '#7f8c8d',
+    color: '#777777',
   },
   summaryValue: {
     fontSize: 15,
     fontWeight: '500',
-    color: '#2c3e50',
+    color: '#333333',
   },
   summaryTotal: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#27ae60',
+    color: '#4CAF50',
   },
   tabs: {
     flexDirection: 'row',
     marginBottom: 20,
-    backgroundColor: '#fff',
+    backgroundColor: '#FFFFFF',
     borderRadius: 8,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: '#e0e0e0',
+    borderColor: '#E0E0E0',
   },
   tab: {
     flex: 1,
@@ -697,15 +600,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   activeTab: {
-    backgroundColor: '#009ee3',
+    backgroundColor: '#FF7F00',
   },
   tabText: {
     fontSize: 15,
     fontWeight: '500',
-    color: '#7f8c8d',
+    color: '#777777',
   },
   activeTabText: {
-    color: '#fff',
+    color: '#FFFFFF',
   },
   form: {
     marginBottom: 20,
@@ -714,26 +617,36 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: '600',
     marginBottom: 16,
-    color: '#2c3e50',
+    color: '#333333',
+  },
+  cardFieldContainer: {
+    height: 50,
+    marginBottom: 12,
+  },
+  cardField: {
+    backgroundColor: '#FFFFFF',
+    borderColor: '#E0E0E0',
+    borderWidth: 1,
+    borderRadius: 8,
+    fontSize: 16,
+    placeholderColor: '#999999',
+  },
+  cardFieldStyle: {
+    height: 50,
+    width: '100%',
   },
   input: {
-    backgroundColor: '#fff',
+    backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: '#e0e0e0',
+    borderColor: '#E0E0E0',
     borderRadius: 8,
     padding: 14,
     marginBottom: 12,
     fontSize: 15,
-  },
-  row: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  halfInput: {
-    width: '48%',
+    color: '#333333',
   },
   button: {
-    backgroundColor: '#009ee3',
+    backgroundColor: '#FF7F00',
     padding: 16,
     borderRadius: 8,
     alignItems: 'center',
@@ -741,34 +654,53 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   disabledButton: {
-    backgroundColor: '#95a5a6',
+    backgroundColor: '#CCCCCC',
   },
   buttonText: {
-    color: '#fff',
+    color: '#FFFFFF',
     fontWeight: 'bold',
     fontSize: 16,
+  },
+  securityInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 12,
+  },
+  securityText: {
+    marginLeft: 6,
+    fontSize: 12,
+    color: '#777777',
   },
   pixContainer: {
     marginBottom: 20,
   },
   pixDescription: {
     fontSize: 15,
-    color: '#7f8c8d',
+    color: '#777777',
     marginBottom: 20,
     textAlign: 'center',
   },
   qrCodeContainer: {
     alignItems: 'center',
     marginBottom: 16,
+    backgroundColor: '#FFFFFF',
+    padding: 20,
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   qrCode: {
-    width: 200,
-    height: 200,
+    width: 250,
+    height: 250,
   },
   codeContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#f0f0f0',
+    backgroundColor: '#F0F0F0',
     borderRadius: 8,
     padding: 12,
     marginBottom: 12,
@@ -776,40 +708,41 @@ const styles = StyleSheet.create({
   codeText: {
     flex: 1,
     fontSize: 14,
-    color: '#2c3e50',
+    color: '#333333',
+    fontFamily: Platform.OS === 'ios' ? 'Courier New' : 'monospace',
   },
   copyButton: {
-    backgroundColor: '#009ee3',
-    paddingVertical: 6,
+    backgroundColor: '#FF7F00',
+    paddingVertical: 8,
     paddingHorizontal: 12,
-    borderRadius: 5,
+    borderRadius: 6,
     marginLeft: 10,
   },
   copyButtonText: {
-    color: '#fff',
+    color: '#FFFFFF',
     fontWeight: '500',
-    fontSize: 13,
+    fontSize: 14,
   },
   pixLinkButton: {
-    backgroundColor: '#f0f0f0',
+    backgroundColor: '#F0F0F0',
     padding: 12,
     borderRadius: 8,
     alignItems: 'center',
     marginBottom: 12,
   },
   pixLinkButtonText: {
-    color: '#009ee3',
+    color: '#FF7F00',
     fontWeight: '500',
   },
   expirationText: {
     fontSize: 13,
-    color: '#e74c3c',
+    color: '#E74C3C',
     textAlign: 'center',
     marginBottom: 8,
   },
   pixInstructions: {
     fontSize: 14,
-    color: '#7f8c8d',
+    color: '#777777',
     textAlign: 'center',
     marginBottom: 16,
   },
@@ -821,14 +754,8 @@ const styles = StyleSheet.create({
   },
   statusText: {
     marginLeft: 8,
-    color: '#7f8c8d',
+    color: '#777777',
     fontSize: 14,
-  },
-  closeButton: {
-    position: 'absolute',
-    top: 10,
-    right: 16,
-    zIndex: 1,
   },
   modalContainer: {
     flex: 1,
@@ -839,9 +766,14 @@ const styles = StyleSheet.create({
   modalContent: {
     width: '80%',
     backgroundColor: 'white',
-    borderRadius: 10,
+    borderRadius: 12,
     padding: 20,
     alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
   },
   modalIcon: {
     marginBottom: 15,
@@ -850,17 +782,18 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: 'bold',
     marginBottom: 10,
-    color: '#2c3e50',
+    color: '#333333',
+    textAlign: 'center',
   },
   modalText: {
     fontSize: 16,
     textAlign: 'center',
     marginBottom: 20,
-    color: '#7f8c8d',
+    color: '#777777',
   },
   modalButton: {
-    backgroundColor: '#009ee3',
-    padding: 12,
+    backgroundColor: '#FF7F00',
+    padding: 14,
     borderRadius: 8,
     width: '100%',
     alignItems: 'center',
