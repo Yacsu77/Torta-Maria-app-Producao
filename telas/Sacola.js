@@ -23,6 +23,7 @@ const Sacola = ({ navigation }) => {
   const [sectionInfo, setSectionInfo] = useState(null);
   const [total, setTotal] = useState(0);
   const [totalPontos, setTotalPontos] = useState(0);
+  const [expandedCombos, setExpandedCombos] = useState({});
   const isFocused = useIsFocused();
 
   // Cores padrão
@@ -39,12 +40,20 @@ const Sacola = ({ navigation }) => {
 
   const TAXA_ENTREGA = 15;
   const VALOR_BASE_COMBO = 53.00;
+  const SALADA_IMAGE = 'https://yacsu77.blob.core.windows.net/acompa/Prancheta%201.png';
 
   useEffect(() => {
     if (isFocused) {
       carregarSacola();
     }
   }, [isFocused]);
+
+  const toggleCombo = (comboId) => {
+    setExpandedCombos(prev => ({
+      ...prev,
+      [comboId]: !prev[comboId]
+    }));
+  };
 
   const carregarSacola = async () => {
     try {
@@ -61,6 +70,13 @@ const Sacola = ({ navigation }) => {
         // Carrega combos
         const responseCombos = await axios.get(`https://sivpt-betaapi.onrender.com/api/sacola/listar/combos/${secao.id}`);
         setCombos(responseCombos.data);
+
+        // Inicializa todos os combos como fechados
+        const initialExpandedState = {};
+        responseCombos.data.forEach(combo => {
+          initialExpandedState[combo.Id] = false;
+        });
+        setExpandedCombos(initialExpandedState);
 
         // Carrega promoções
         const responsePromocoes = await axios.get(`https://sivpt-betaapi.onrender.com/api/sacola/listar/pontos/${secao.id}`);
@@ -109,16 +125,16 @@ const Sacola = ({ navigation }) => {
       return acc + valorCombo;
     }, 0);
     
-    // Taxa de entrega se for delivery
-    if (tipoSecao === '2') {
-      somaProdutos += TAXA_ENTREGA;
-      somaCombos += TAXA_ENTREGA;
+    // Taxa de entrega se for delivery (só adiciona uma vez)
+    let taxaEntrega = 0;
+    if (tipoSecao === '2' && (produtos.length > 0 || combos.length > 0)) {
+      taxaEntrega = TAXA_ENTREGA;
     }
     
     // Soma dos pontos das promoções
     const somaPontos = promocoes.reduce((acc, item) => acc + parseFloat(item.custo_pontos || 0), 0);
     
-    setTotal((somaProdutos + somaCombos).toFixed(2));
+    setTotal((somaProdutos + somaCombos + taxaEntrega).toFixed(2));
     setTotalPontos(somaPontos);
   };
 
@@ -134,7 +150,7 @@ const Sacola = ({ navigation }) => {
 
   const deletarCombo = async (id) => {
     try {
-      await axios.delete(`https://sivpt-betaapi.onrender.com/api/sacola/deletar/combo${id}`);
+      await axios.delete(`https://sivpt-betaapi.onrender.com/api/sacola/deletar/combo/${id}`);
       carregarSacola();
     } catch (error) {
       console.error('Erro ao deletar combo:', error);
@@ -219,61 +235,70 @@ const Sacola = ({ navigation }) => {
       (item.primeiro_produto_acrescimo ? parseFloat(item.primeiro_produto_acrescimo) : 0) + 
       (item.segundo_produto_acrescimo ? parseFloat(item.segundo_produto_acrescimo) : 0);
 
+    const isExpanded = expandedCombos[item.Id];
+
     return (
       <View style={[styles.comboContainer, { backgroundColor: colors.white }]}>
-        <View style={styles.comboHeader}>
-          <Ionicons name="ios-restaurant" size={24} color={colors.secondary} />
-          <Text style={[styles.comboTitle, { color: colors.secondary }]}>Combo</Text>
-          <Text style={[styles.comboPrice, { color: colors.primary }]}>
-            R$ {valorCombo.toFixed(2)}
-          </Text>
-        </View>
-        
-        <View style={styles.comboItem}>
-          <Image 
-            source={{ uri: item.primeiro_produto_imagem || 'https://via.placeholder.com/60' }} 
-            style={styles.comboImage} 
-          />
-          <View style={styles.comboItemInfo}>
-            <Text style={[styles.comboItemName, { color: colors.text }]}>{item.primeiro_produto_nome}</Text>
-            {item.primeiro_produto_acrescimo && (
-              <Text style={[styles.comboItemExtra, { color: colors.textLight }]}>
-                +R$ {parseFloat(item.primeiro_produto_acrescimo).toFixed(2)}
-              </Text>
-            )}
-          </View>
-        </View>
-        
-        <View style={styles.comboItem}>
-          <Image 
-            source={{ uri: item.segundo_produto_imagem || 'https://via.placeholder.com/60' }} 
-            style={styles.comboImage} 
-          />
-          <View style={styles.comboItemInfo}>
-            <Text style={[styles.comboItemName, { color: colors.text }]}>{item.segundo_produto_nome}</Text>
-            {item.segundo_produto_acrescimo && (
-              <Text style={[styles.comboItemExtra, { color: colors.textLight }]}>
-                +R$ {parseFloat(item.segundo_produto_acrescimo).toFixed(2)}
-              </Text>
-            )}
-          </View>
-        </View>
-        
-        <View style={styles.comboItem}>
-          <Ionicons name="leaf" size={24} color={colors.primary} style={styles.comboIcon} />
-          <View style={styles.comboItemInfo}>
-            <Text style={[styles.comboItemName, { color: colors.text }]}>Salada padrão</Text>
-          </View>
-        </View>
-        
         <TouchableOpacity 
-          style={[styles.botaoRemoverCombo, { backgroundColor: colors.error }]}
-          onPress={() => deletarCombo(item.Id)}
+          style={styles.comboHeader} 
+          onPress={() => toggleCombo(item.Id)}
+          activeOpacity={0.8}
         >
-          <Text style={[styles.textoBotaoRemover, { color: colors.white }]}>
-            Remover Combo
-          </Text>
+          <Text style={[styles.comboTitle, { color: colors.secondary }]}>Combo</Text>
+          <View style={styles.comboPriceContainer}>
+            <Text style={[styles.comboPrice, { color: colors.primary }]}>
+              R$ {valorCombo.toFixed(2)}
+            </Text>
+            <Ionicons 
+              name={isExpanded ? 'chevron-up' : 'chevron-down'} 
+              size={20} 
+              color={colors.textLight} 
+            />
+          </View>
         </TouchableOpacity>
+        
+        {isExpanded && (
+          <>
+            <View style={styles.comboItem}>
+              <Image 
+                source={{ uri: item.primeiro_produto_imagem || 'https://via.placeholder.com/60' }} 
+                style={styles.comboImage} 
+              />
+              <View style={styles.comboItemInfo}>
+                <Text style={[styles.comboItemName, { color: colors.text }]}>{item.primeiro_produto_nome}</Text>
+              </View>
+            </View>
+            
+            <View style={styles.comboItem}>
+              <Image 
+                source={{ uri: item.segundo_produto_imagem || 'https://via.placeholder.com/60' }} 
+                style={styles.comboImage} 
+              />
+              <View style={styles.comboItemInfo}>
+                <Text style={[styles.comboItemName, { color: colors.text }]}>{item.segundo_produto_nome}</Text>
+              </View>
+            </View>
+            
+            <View style={styles.comboItem}>
+              <Image 
+                source={{ uri: SALADA_IMAGE }} 
+                style={styles.comboImage} 
+              />
+              <View style={styles.comboItemInfo}>
+                <Text style={[styles.comboItemName, { color: colors.text }]}>Salada padrão</Text>
+              </View>
+            </View>
+            
+            <TouchableOpacity 
+              style={[styles.botaoRemoverCombo, { backgroundColor: colors.error }]}
+              onPress={() => deletarCombo(item.Id)}
+            >
+              <Text style={[styles.textoBotaoRemover, { color: colors.white }]}>
+                Remover Combo
+              </Text>
+            </TouchableOpacity>
+          </>
+        )}
       </View>
     );
   };
@@ -308,6 +333,10 @@ const Sacola = ({ navigation }) => {
     });
   };
 
+  const fecharTela = () => {
+    navigation.goBack();
+  };
+
   if (loading) {
     return (
       <View style={[styles.loadingContainer, { backgroundColor: colors.background }]}>
@@ -319,11 +348,16 @@ const Sacola = ({ navigation }) => {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <ScrollView contentContainerStyle={styles.scrollContainer}>
+      <View style={styles.header}>
         <Text style={[styles.titulo, { color: colors.text }]}>
           <Ionicons name="cart" size={24} /> Sua Sacola
         </Text>
-        
+        <TouchableOpacity onPress={fecharTela} style={styles.closeButton}>
+          <Ionicons name="close" size={28} color={colors.text} />
+        </TouchableOpacity>
+      </View>
+      
+      <ScrollView contentContainerStyle={styles.scrollContainer}>
         {produtos.length === 0 && combos.length === 0 && promocoes.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Ionicons name="sad-outline" size={60} color={colors.textLight} />
@@ -368,7 +402,7 @@ const Sacola = ({ navigation }) => {
             )}
             
             <View style={[styles.resumoContainer, { backgroundColor: colors.white }]}>
-              {sectionInfo?.tipo === '2' && (
+              {sectionInfo?.tipo === '2' && (produtos.length > 0 || combos.length > 0) && (
                 <View style={styles.linhaResumo}>
                   <Text style={{ color: colors.text }}>Taxa de entrega:</Text>
                   <Text style={{ color: colors.text }}>R$ {TAXA_ENTREGA.toFixed(2)}</Text>
@@ -408,6 +442,16 @@ const Sacola = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingTop: 16,
+  },
+  closeButton: {
+    padding: 5,
   },
   scrollContainer: {
     padding: 16,
@@ -468,20 +512,21 @@ const styles = StyleSheet.create({
   comboHeader: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     marginBottom: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
-    paddingBottom: 10,
   },
   comboTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    marginLeft: 10,
-    flex: 1,
+  },
+  comboPriceContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   comboPrice: {
     fontSize: 18,
     fontWeight: 'bold',
+    marginRight: 10,
   },
   comboItem: {
     flexDirection: 'row',
@@ -494,22 +539,11 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginRight: 10,
   },
-  comboIcon: {
-    width: 60,
-    height: 60,
-    marginRight: 10,
-    textAlign: 'center',
-    lineHeight: 60,
-  },
   comboItemInfo: {
     flex: 1,
   },
   comboItemName: {
     fontSize: 16,
-  },
-  comboItemExtra: {
-    fontSize: 14,
-    fontStyle: 'italic',
   },
   promocaoContainer: {
     flexDirection: 'row',
