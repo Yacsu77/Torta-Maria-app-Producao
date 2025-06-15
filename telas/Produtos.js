@@ -16,6 +16,8 @@ import {
 import { getCurrentSection } from '../auth';
 import axios from 'axios';
 
+const { width, height } = Dimensions.get('window');
+
 const formatarPreco = (preco) => {
   const numero = parseFloat(preco);
   return isNaN(numero) ? 'Preço indisponível' : `R$ ${numero.toFixed(2)}`;
@@ -174,17 +176,20 @@ const Produtos = ({ route, navigation }) => {
 
   const renderBannerCombo = () => {
     return (
-      <TouchableOpacity 
-        style={styles.bannerComboContainer}
-        onPress={() => navigation.navigate('Vadecombo')}
-      >
-        <Image 
-          source={require('../assets/Combo.png')} 
-          style={styles.bannerComboImage}
-          resizeMode="contain"
-        />
-        <Text style={styles.bannerComboText}>Va de Combo!</Text>
-      </TouchableOpacity>
+      <View style={styles.bannerComboWrapper}>
+        <TouchableOpacity 
+          style={styles.bannerComboContainer}
+          onPress={() => navigation.navigate('Vadecombo')}
+        >
+          <View style={styles.borderAnimation} />
+          <Image 
+            source={{ uri: 'https://yacsu77.blob.core.windows.net/promos/Prancheta 1.png' }} 
+            style={styles.bannerComboImage}
+            resizeMode="contain"
+          />
+          <Text style={styles.comboText}>Monte o seu combo</Text>
+        </TouchableOpacity>
+      </View>
     );
   };
 
@@ -211,7 +216,7 @@ const Produtos = ({ route, navigation }) => {
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
+    <View style={styles.container}>
       <Image 
         source={require('../assets/fundo.png')} 
         style={styles.backgroundImage}
@@ -293,7 +298,7 @@ const Produtos = ({ route, navigation }) => {
           <View style={styles.categoriaSection}>
             <Text style={[styles.categoriaTitulo, { color: colors.primary }]}>{categoria}</Text>
             
-            {/* Adiciona o banner de combo antes dos produtos */}
+            {/* Renderiza o banner de combo apenas na primeira categoria e quando nenhuma categoria está selecionada */}
             {categoriaSelecionada === null && categoria === Object.keys(produtosPorCategoria)[0] && renderBannerCombo()}
             
             {produtosDaCategoria.map(produto => (
@@ -353,13 +358,15 @@ const Produtos = ({ route, navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 10,
+    position: 'relative',
   },
   backgroundImage: {
     position: 'absolute',
     width: '100%',
     height: '100%',
-    opacity: 1,
+    top: 0,
+    left: 0,
+    zIndex: -1,
   },
   loadingContainer: {
     flex: 1,
@@ -388,6 +395,7 @@ const styles = StyleSheet.create({
   lojaInfo: {
     padding: 15,
     borderRadius: 8,
+    margin: 10,
     marginBottom: 10,
   },
   lojaNome: {
@@ -410,12 +418,14 @@ const styles = StyleSheet.create({
   searchBar: {
     borderRadius: 8,
     padding: 12,
+    margin: 10,
     marginBottom: 10,
     fontSize: 16,
     borderWidth: 1,
   },
   categoriasContainer: {
     height: 50,
+    marginHorizontal: 10,
     marginBottom: 10,
   },
   categoriaItem: {
@@ -430,38 +440,51 @@ const styles = StyleSheet.create({
   },
   categoriaSection: {
     marginBottom: 20,
+    paddingHorizontal: 10,
   },
   categoriaTitulo: {
     fontSize: 18,
     fontWeight: 'bold',
     marginBottom: 10,
+    marginLeft: 10,
+  },
+  bannerComboWrapper: {
+    margin: 10,
+    marginBottom: 15,
+    position: 'relative',
   },
   bannerComboContainer: {
-    borderRadius: 8,
-    marginBottom: 15,
+    borderRadius: 12,
+    overflow: 'hidden',
     alignItems: 'center',
-    padding: 10,
+    paddingBottom: 10,
     backgroundColor: '#fff',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
+  },
+  borderAnimation: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 4,
+    backgroundColor: '#e67e22',
+    zIndex: 1,
+    borderRadius: 12,
   },
   bannerComboImage: {
     width: '100%',
-    height: 150,
-    borderRadius: 8,
-    marginBottom: 10,
+    height: 180,
+    marginTop: 4,
   },
-  bannerComboText: {
+  comboText: {
+    color: '#e67e22',
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#e67e22',
+    marginTop: 5,
   },
   produtoCard: {
     borderRadius: 8,
     padding: 10,
+    marginHorizontal: 10,
     marginBottom: 10,
     flexDirection: 'row',
     alignItems: 'center',

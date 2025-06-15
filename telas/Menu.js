@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, createContext, useContext } from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createStackNavigator } from '@react-navigation/stack';
-import { TouchableOpacity, Text, View, StyleSheet, StatusBar } from 'react-native';
+import { TouchableOpacity, Text, View, StyleSheet, StatusBar, Image } from 'react-native';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { getCurrentSection } from '../auth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import axios from 'axios';
 
 import Produtos from './Produtos';
 import Perfil from './Perfil';
@@ -18,6 +19,9 @@ import ConfirmacaoPagamentos from './ConfirmacaoPagamento';
 import DetalhesProntos from './DetalhesProntos';
 import DetalheProduto from './DetalheProduto';
 import Vadecombo from './Vadecombo';
+
+// Criando o contexto para compartilhar o estado global
+const AppContext = createContext();
 
 const Tab = createBottomTabNavigator();
 const RootStack = createStackNavigator();
@@ -35,24 +39,15 @@ const colors = {
   darkText: '#212121'
 };
 
+// Função para agrupar produtos (simulação)
+const agruparProdutos = (produtos) => {
+  // Implemente sua lógica de agrupamento aqui
+  return produtos;
+};
+
 // Componente do cabeçalho personalizado
 const CustomHeader = ({ navigation }) => {
-  const [currentSection, setCurrentSection] = useState(null);
-  const [selectedLoja, setSelectedLoja] = useState(null);
-
-  useEffect(() => {
-    const loadSectionData = async () => {
-      const section = await getCurrentSection();
-      setCurrentSection(section);
-      
-      const loja = await AsyncStorage.getItem('selectedLoja');
-      if (loja) {
-        setSelectedLoja(JSON.parse(loja));
-      }
-    };
-    
-    loadSectionData();
-  }, []);
+  const { sacolaCount, selectedLoja } = useContext(AppContext);
 
   return (
     <View style={styles.headerContainer}>
@@ -62,18 +57,20 @@ const CustomHeader = ({ navigation }) => {
       >
         <MaterialIcons name="store" size={20} color={colors.white} />
         <Text style={[styles.headerButtonText, { color: colors.white }]}>
-          {currentSection ? (selectedLoja?.Nome_loja || 'Loja Selecionada') : 'Escolher Loja'}
+          {selectedLoja ? selectedLoja.Nome_loja : 'Escolher Loja'}
         </Text>
       </TouchableOpacity>
       
       <View style={{ flex: 1 }} />
       
       <TouchableOpacity
-        style={[styles.headerButton, { backgroundColor: colors.primaryGreen }]}
+        style={[styles.headerButton, { backgroundColor: colors.primaryOrange }]}
         onPress={() => navigation.navigate('SacolaModal')}
       >
         <MaterialIcons name="shopping-basket" size={20} color={colors.white} />
-        <Text style={[styles.headerButtonText, { color: colors.white }]}>Sacola</Text>
+        <Text style={[styles.headerButtonText, { color: colors.white }]}>
+          Sacola {sacolaCount > 0 ? `(${sacolaCount})` : ''}
+        </Text>
       </TouchableOpacity>
     </View>
   );
@@ -81,15 +78,28 @@ const CustomHeader = ({ navigation }) => {
 
 // Componente principal do Menu com abas
 function MainTabs() {
+  const { loadSacolaCount } = useContext(AppContext);
+
+  // Atualiza a contagem da sacola sempre que a tab muda
+  const handleTabPress = () => {
+    loadSacolaCount();
+  };
+
   return (
     <Tab.Navigator
       screenOptions={({ route, navigation }) => ({
         tabBarIcon: ({ focused, color, size }) => {
-          let iconName;
-          
           if (route.name === 'Produtos') {
-            iconName = focused ? 'fast-food' : 'fast-food-outline';
-          } else if (route.name === 'Pontos') {
+            return (
+              <Image 
+                source={require('../assets/torta-de-maca.png')} 
+                style={{ width: size, height: size, tintColor: color }}
+              />
+            );
+          }
+          
+          let iconName;
+          if (route.name === 'Pontos') {
             iconName = focused ? 'trophy' : 'trophy-outline';
           } else if (route.name === 'Pedidos') {
             iconName = focused ? 'receipt' : 'receipt-outline';
@@ -98,6 +108,10 @@ function MainTabs() {
           }
           
           return <Ionicons name={iconName} size={size} color={color} />;
+        },
+        tabBarOnPress: ({ navigation, defaultHandler }) => {
+          handleTabPress();
+          defaultHandler();
         },
         tabBarActiveTintColor: colors.primaryOrange,
         tabBarInactiveTintColor: colors.darkText,
@@ -147,8 +161,89 @@ function MainTabs() {
   );
 }
 
+// Provedor de contexto para gerenciar o estado global
+const AppProvider = ({ children }) => {
+  const [sacolaCount, setSacolaCount] = useState(0);
+  const [selectedLoja, setSelectedLoja] = useState(null);
+  const [currentSection, setCurrentSection] = useState(null);
+
+  // Carrega a seção atual e a loja selecionada
+  const loadSectionData = async () => {
+    try {
+      const section = await getCurrentSection();
+      setCurrentSection(section);
+      
+      const loja = await AsyncStorage.getItem('selectedLoja');
+      if (loja) {
+        setSelectedLoja(JSON.parse(loja));
+      }
+    } catch (error) {
+      console.error('Erro ao carregar dados da seção:', error);
+    }
+  };
+
+  // Carrega a contagem de itens na sacola
+  const loadSacolaCount = async () => {
+    if (!currentSection) return;
+
+    try {
+      // Carrega produtos
+      const responseProdutos = await axios.get(`https://sivpt-betaapi.onrender.com/api/sacola/listar/itens/${currentSection.id}`);
+      const produtosCount = responseProdutos.data.length || 0;
+
+      // Carrega combos
+      const responseCombos = await axios.get(`https://sivpt-betaapi.onrender.com/api/sacola/listar/combos/${currentSection.id}`);
+      const combosCount = responseCombos.data.length || 0;
+
+      // Carrega promoções
+      const responsePromocoes = await axios.get(`https://sivpt-betaapi.onrender.com/api/sacola/listar/pontos/${currentSection.id}`);
+      const promocoesCount = responsePromocoes.data.length || 0;
+
+      setSacolaCount(produtosCount + combosCount + promocoesCount);
+    } catch (error) {
+      console.error('Erro ao carregar contagem da sacola:', error);
+      setSacolaCount(0);
+    }
+  };
+
+  // Atualiza a loja selecionada
+  const updateSelectedLoja = async (loja) => {
+    try {
+      await AsyncStorage.setItem('selectedLoja', JSON.stringify(loja));
+      setSelectedLoja(loja);
+      loadSacolaCount(); // Atualiza a contagem da sacola quando a loja muda
+    } catch (error) {
+      console.error('Erro ao atualizar loja selecionada:', error);
+    }
+  };
+
+  // Carrega os dados iniciais
+  useEffect(() => {
+    loadSectionData();
+  }, []);
+
+  // Atualiza a contagem da sacola quando a seção ou loja muda
+  useEffect(() => {
+    if (currentSection && selectedLoja) {
+      loadSacolaCount();
+    }
+  }, [currentSection, selectedLoja]);
+
+  return (
+    <AppContext.Provider value={{
+      sacolaCount,
+      selectedLoja,
+      currentSection,
+      loadSacolaCount,
+      updateSelectedLoja
+    }}>
+      {children}
+    </AppContext.Provider>
+  );
+};
+
 // Stack principal com modais
-export default function Menu() {
+function MenuStack() {
   return (
     <>
       <StatusBar backgroundColor={colors.darkGreen} barStyle="light-content" />
@@ -229,6 +324,15 @@ export default function Menu() {
         />
       </RootStack.Navigator>
     </>
+  );
+}
+
+// Componente principal que envolve tudo com o Provider
+export default function Menu() {
+  return (
+    <AppProvider>
+      <MenuStack />
+    </AppProvider>
   );
 }
 
