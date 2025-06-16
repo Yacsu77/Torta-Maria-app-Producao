@@ -1,11 +1,14 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Image, ActivityIndicator, SafeAreaView, ScrollView } from 'react-native';
-import { getUserData, logoutUser } from '../auth';
+import { View, Text, TouchableOpacity, StyleSheet, Image, ActivityIndicator, SafeAreaView, ScrollView, Alert } from 'react-native';
+import { getUserData, logoutUser, updateUserLocal } from '../auth';
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system';
 
 export default function Perfil({ navigation }) {
   const [user, setUser] = useState(null);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [isUpdatingImage, setIsUpdatingImage] = useState(false);
 
   useEffect(() => {
     const carregar = async () => {
@@ -15,19 +18,60 @@ export default function Perfil({ navigation }) {
     carregar();
   }, []);
 
+  const pickImage = async () => {
+    try {
+      // Verificar permissõse
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permissão necessária', 'Precisamos de acesso à sua galeria para alterar a foto');
+        return;
+      }
+
+      let result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.7,
+        base64: true,
+      });
+
+      if (!result.canceled && result.assets && result.assets[0].base64) {
+        setIsUpdatingImage(true);
+        
+        // Criar URI base64
+        const base64Image = `data:image/jpeg;base64,${result.assets[0].base64}`;
+        
+        // Atualizar no armazenamento local
+        await updateUserLocal({ foto: base64Image });
+        
+        // Atualizar o estado local
+        setUser(prev => ({ ...prev, foto: base64Image }));
+        
+        setIsUpdatingImage(false);
+        Alert.alert('Sucesso', 'Foto de perfil atualizada com sucesso!');
+      }
+    } catch (error) {
+      console.error('Erro ao selecionar imagem:', error);
+      setIsUpdatingImage(false);
+      Alert.alert('Erro', 'Não foi possível atualizar a imagem de perfil');
+    }
+  };
+
   const handleLogout = async () => {
     if (isLoggingOut) return;
     
     setIsLoggingOut(true);
     try {
       await logoutUser();
+      // Redireciona para a tela principal (app.js)
       navigation.reset({
         index: 0,
-        routes: [{ name: 'TelaInicial' }],
+        routes: [{ name: 'App' }],
       });
     } catch (error) {
       console.error('Erro ao fazer logout:', error);
       setIsLoggingOut(false);
+      Alert.alert('Erro', 'Não foi possível sair da conta');
     }
   };
 
@@ -47,10 +91,21 @@ export default function Perfil({ navigation }) {
           {/* Header com foto e nome */}
           <View style={styles.header}>
             <View style={styles.avatarContainer}>
-              <Image
-                style={styles.avatar}
-                source={user.foto ? { uri: user.foto } : require('../assets/default-avatar.png')}
-              />
+              <TouchableOpacity onPress={pickImage} disabled={isUpdatingImage}>
+                {isUpdatingImage ? (
+                  <View style={[styles.avatar, styles.avatarLoading]}>
+                    <ActivityIndicator size="small" color="white" />
+                  </View>
+                ) : (
+                  <Image
+                    style={styles.avatar}
+                    source={user.foto ? { uri: user.foto } : require('../assets/default-avatar.png')}
+                  />
+                )}
+                <View style={styles.editIcon}>
+                  <Ionicons name="camera-outline" size={20} color="white" />
+                </View>
+              </TouchableOpacity>
               <Text style={styles.userName}>{user.Nome_Cli}</Text>
               <Text style={styles.userEmail}>{user.Email_Cli}</Text>
             </View>
@@ -164,6 +219,21 @@ const styles = StyleSheet.create({
     borderColor: 'white',
     marginBottom: 15,
     backgroundColor: '#E0E0E0',
+  },
+  avatarLoading: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#CCCCCC',
+  },
+  editIcon: {
+    position: 'absolute',
+    bottom: 20,
+    right: 0,
+    backgroundColor: '#2E7D32',
+    borderRadius: 15,
+    padding: 5,
+    borderWidth: 2,
+    borderColor: 'white',
   },
   userName: {
     fontSize: 24,

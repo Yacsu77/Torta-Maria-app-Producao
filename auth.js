@@ -8,24 +8,45 @@ export const saveUserData = async (userData) => {
   }
 };
 
+export const updateUserLocal = async (updates) => {
+  try {
+    // Obter dados atuais do usuário
+    const currentUserData = await getUserData();
+    if (!currentUserData) throw new Error('Usuário não encontrado');
+    
+    // Atualizar os dados
+    const updatedUser = { ...currentUserData, ...updates };
+    
+    // Salvar no AsyncStorage
+    await AsyncStorage.setItem('userData', JSON.stringify(updatedUser));
+    
+    return updatedUser;
+  } catch (error) {
+    console.error('Erro ao atualizar usuário localmente:', error);
+    throw error;
+  }
+};
+
+
+// Função para obter dados do usuário (já existente, apenas para referência)
 export const getUserData = async () => {
   try {
-    const data = await AsyncStorage.getItem('user');
-    return data ? JSON.parse(data) : null;
+    const userData = await AsyncStorage.getItem('userData');
+    return userData ? JSON.parse(userData) : null;
   } catch (error) {
-    console.log('Erro ao buscar dados:', error);
+    console.error('Erro ao obter dados do usuário:', error);
     return null;
   }
 };
 
+// Função de logout (já existente, apenas para referência)
 export const logoutUser = async () => {
   try {
-    await AsyncStorage.removeItem('user');
-    await AsyncStorage.removeItem('currentSection');
-    await AsyncStorage.removeItem('tipoSecao');
-    await AsyncStorage.removeItem('selectedLoja');
+    await AsyncStorage.removeItem('userData');
+    // Adicione aqui qualquer outra limpeza necessária
   } catch (error) {
-    console.log('Erro ao fazer logout:', error);
+    console.error('Erro ao fazer logout:', error);
+    throw error;
   }
 };
 
