@@ -7,17 +7,26 @@ import {
   ScrollView, 
   TouchableOpacity, 
   FlatList,
-  ActivityIndicator  // Adicionei esta importação
+  ActivityIndicator,
+  Modal,
+  Dimensions,
+  Animated,
+  Easing
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { getCurrentSection } from '../auth';
 import axios from 'axios';
+import { LinearGradient } from 'expo-linear-gradient';
+
+const { width, height } = Dimensions.get('window');
 
 const DetalheProduto = ({ route, navigation }) => {
   const { produto } = route.params;
   const [produtosRelacionados, setProdutosRelacionados] = useState([]);
   const [loading, setLoading] = useState(true);
   const [idSecao, setIdSecao] = useState(null);
+  const [modalVisible, setModalVisible] = useState(false);
+  const [scaleValue] = useState(new Animated.Value(1));
 
   // Cores padrão
   const colors = {
@@ -89,6 +98,28 @@ const DetalheProduto = ({ route, navigation }) => {
     return isNaN(numero) ? 'Preço indisponível' : `R$ ${numero.toFixed(2)}`;
   };
 
+  const handleImagePress = () => {
+    setModalVisible(true);
+  };
+
+  const zoomIn = () => {
+    Animated.timing(scaleValue, {
+      toValue: 1.5,
+      duration: 300,
+      easing: Easing.linear,
+      useNativeDriver: true
+    }).start();
+  };
+
+  const zoomOut = () => {
+    Animated.timing(scaleValue, {
+      toValue: 1,
+      duration: 300,
+      easing: Easing.linear,
+      useNativeDriver: true
+    }).start();
+  };
+
   const renderProdutoRelacionado = ({ item }) => (
     <TouchableOpacity 
       style={styles.produtoRelacionadoCard}
@@ -115,13 +146,17 @@ const DetalheProduto = ({ route, navigation }) => {
 
       <ScrollView>
         {/* Imagem do produto */}
-        <View style={styles.imagemContainer}>
+        <TouchableOpacity 
+          style={styles.imagemContainer}
+          activeOpacity={0.9}
+          onPress={handleImagePress}
+        >
           <Image 
             source={{ uri: produto.URL_image }} 
             style={styles.produtoImagem}
             resizeMode="contain"
           />
-        </View>
+        </TouchableOpacity>
         
         {/* Informações do produto */}
         <View style={[styles.infoContainer, { backgroundColor: colors.white }]}>
@@ -135,7 +170,14 @@ const DetalheProduto = ({ route, navigation }) => {
             style={[styles.addButton, { backgroundColor: colors.secondary }]}
             onPress={adicionarAoCarrinho}
           >
-            <Text style={styles.addButtonText}>Adicionar à Sacola</Text>
+            <LinearGradient
+              colors={[colors.secondary, '#f39c12']}
+              style={styles.buttonGradient}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+            >
+              <Text style={styles.addButtonText}>Adicionar à Sacola</Text>
+            </LinearGradient>
           </TouchableOpacity>
           
           {/* Descrição */}
@@ -162,7 +204,7 @@ const DetalheProduto = ({ route, navigation }) => {
 
         {/* Produtos relacionados */}
         <View style={[styles.relacionadosContainer, { backgroundColor: colors.white }]}>
-          <Text style={[styles.relacionadosTitle, { color: colors.text }]}>Você também pode gostar</Text>
+          <Text style={[styles.relacionadosTitle, { color: colors.secondary }]}>Você também pode gostar</Text>
           
           {loading ? (
             <ActivityIndicator size="small" color={colors.primary} />
@@ -178,6 +220,41 @@ const DetalheProduto = ({ route, navigation }) => {
           )}
         </View>
       </ScrollView>
+
+      {/* Modal para zoom na imagem */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={modalVisible}
+        onRequestClose={() => setModalVisible(false)}
+      >
+        <View style={styles.modalContainer}>
+          <TouchableOpacity 
+            style={styles.modalCloseButton}
+            onPress={() => setModalVisible(false)}
+          >
+            <Ionicons name="close" size={32} color={colors.white} />
+          </TouchableOpacity>
+          
+          <ScrollView 
+            maximumZoomScale={3}
+            minimumZoomScale={1}
+            contentContainerStyle={styles.modalScrollContent}
+          >
+            <TouchableOpacity 
+              activeOpacity={1}
+              onPressIn={zoomIn}
+              onPressOut={zoomOut}
+            >
+              <Animated.Image
+                source={{ uri: produto.URL_image }}
+                style={[styles.modalImage, { transform: [{ scale: scaleValue }] }]}
+                resizeMode="contain"
+              />
+            </TouchableOpacity>
+          </ScrollView>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -192,6 +269,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'flex-end',
     zIndex: 1,
+    position: 'absolute',
+    top: 0,
+    right: 0,
   },
   closeButton: {
     width: 40,
@@ -200,39 +280,54 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.7)',
     justifyContent: 'center',
     alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
   },
   imagemContainer: {
-    height: 300,
+    height: 350,
     width: '100%',
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#f1f1f1',
+    backgroundColor: '#fff', // Fundo totalmente branco
   },
   produtoImagem: {
     width: '100%',
     height: '100%',
+    backgroundColor: '#fff', // Fundo totalmente branco
   },
   infoContainer: {
-    padding: 20,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    marginTop: -20,
+    padding: 25,
+    borderTopLeftRadius: 25,
+    borderTopRightRadius: 25,
+    marginTop: -25,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -5 },
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    elevation: 5,
   },
   produtoNome: {
-    fontSize: 24,
+    fontSize: 26,
     fontWeight: 'bold',
     marginBottom: 5,
   },
   produtoPreco: {
-    fontSize: 22,
+    fontSize: 24,
     fontWeight: 'bold',
     marginBottom: 20,
   },
   addButton: {
-    padding: 15,
-    borderRadius: 10,
-    alignItems: 'center',
+    borderRadius: 12,
     marginVertical: 20,
+    overflow: 'hidden',
+  },
+  buttonGradient: {
+    padding: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   addButtonText: {
     color: '#fff',
@@ -240,12 +335,15 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   section: {
-    marginBottom: 20,
+    marginBottom: 25,
+    paddingBottom: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f1f1',
   },
   sectionTitle: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: 'bold',
-    marginBottom: 10,
+    marginBottom: 12,
   },
   sectionContent: {
     fontSize: 16,
@@ -253,7 +351,7 @@ const styles = StyleSheet.create({
   },
   caracteristicaItem: {
     flexDirection: 'row',
-    marginBottom: 5,
+    marginBottom: 8,
   },
   caracteristicaKey: {
     fontWeight: 'bold',
@@ -264,13 +362,18 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   relacionadosContainer: {
-    padding: 20,
+    padding: 25,
     marginTop: 10,
-    borderTopWidth: 1,
-    borderTopColor: '#f1f1f1',
+    borderTopLeftRadius: 25,
+    borderTopRightRadius: 25,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -5 },
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    elevation: 5,
   },
   relacionadosTitle: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: 'bold',
     marginBottom: 15,
   },
@@ -278,26 +381,59 @@ const styles = StyleSheet.create({
     paddingBottom: 10,
   },
   produtoRelacionadoCard: {
-    width: 150,
+    width: 160,
     marginRight: 15,
+    borderRadius: 12,
+    overflow: 'hidden',
+    backgroundColor: '#fff',
   },
   produtoRelacionadoImagem: {
-    width: 150,
-    height: 120,
-    borderRadius: 10,
-    backgroundColor: '#f1f1f1',
+    width: 160,
+    height: 140,
+    backgroundColor: '#fff',
   },
   produtoRelacionadoNome: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '600',
     marginTop: 8,
     color: '#333',
+    paddingHorizontal: 8,
   },
   produtoRelacionadoPreco: {
     fontSize: 16,
     fontWeight: 'bold',
     color: '#2ecc71',
     marginTop: 5,
+    paddingHorizontal: 8,
+    marginBottom: 10,
+  },
+  modalContainer: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.9)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalCloseButton: {
+    position: 'absolute',
+    top: 50,
+    right: 20,
+    zIndex: 1,
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalScrollContent: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalImage: {
+    width: width,
+    height: height * 0.8,
+    backgroundColor: '#fff',
   },
 });
 
