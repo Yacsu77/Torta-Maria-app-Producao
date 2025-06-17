@@ -26,7 +26,7 @@ const CriarPedidos = () => {
   const [pedidoData, setPedidoData] = useState({
     id_secao: null,
     Tipo_Pedido: 1,
-    Data_pedido: new Date().toISOString().split('T')[0],
+    Data_pedido: moment().format('DD/MM/YYYY'),
     Hora_Pedido: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     Valor_pedido: total || '0.00',
     Situacao: 1
@@ -71,7 +71,7 @@ const CriarPedidos = () => {
     
     if (date) {
       setSelectedDate(date);
-      const formattedDate = date.toISOString().split('T')[0];
+      const formattedDate = moment(date).format('DD/MM/YYYY');
       setPedidoData(prev => ({
         ...prev,
         Data_pedido: formattedDate
@@ -180,13 +180,22 @@ const CriarPedidos = () => {
         }
       }
 
+      // Formata a data para o formato ISO antes de enviar para a API
+      const dataISO = moment(selectedDate).format('YYYY-MM-DD');
+      
+      // Cria o objeto com os dados formatados para a API
+      const pedidoParaAPI = {
+        ...pedidoData,
+        Data_pedido: dataISO
+      };
+
       // Depois cria o pedido
       const response = await fetch('https://sivpt-betaapi.onrender.com/api/pedido/inserir', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(pedidoData),
+        body: JSON.stringify(pedidoParaAPI),
       });
 
       const data = await response.json();
@@ -285,7 +294,7 @@ const CriarPedidos = () => {
           <Text style={styles.cardTitle}>Resumo do Pedido</Text>
           
           <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Número da Seção:</Text>
+            <Text style={styles.infoLabel}>Número do Pedido:</Text>
             <Text style={styles.infoValue}>{pedidoData.id_secao || '--'}</Text>
           </View>
           
@@ -418,7 +427,7 @@ const styles = StyleSheet.create({
     borderColor: '#dfe6e9',
   },
   dateTimeButtonText: {
-    color: '#3498db',
+    color: '#FF7F00', // Alterado para laranja
     fontSize: 15,
     fontWeight: '500',
   },
@@ -447,12 +456,12 @@ const styles = StyleSheet.create({
     color: '#27ae60',
   },
   botaoPagar: {
-    backgroundColor: '#009ee3',
+    backgroundColor: '#FF7F00', // Alterado para laranja
     padding: 18,
     borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#009ee3',
+    shadowColor: '#FF7F00', // Alterado para laranja
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 5,
@@ -487,7 +496,7 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   iosButton: {
-    backgroundColor: '#009ee3',
+    backgroundColor: '#FF7F00', // Alterado para laranja
     paddingVertical: 8,
     paddingHorizontal: 15,
     borderRadius: 5,
