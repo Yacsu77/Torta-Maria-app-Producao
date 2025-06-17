@@ -28,25 +28,24 @@ export const updateUserLocal = async (updates) => {
 };
 
 
-// Função para obter dados do usuário (já existente, apenas para referência)
 export const getUserData = async () => {
   try {
-    const userData = await AsyncStorage.getItem('userData');
-    return userData ? JSON.parse(userData) : null;
+    const data = await AsyncStorage.getItem('user');
+    return data ? JSON.parse(data) : null;
   } catch (error) {
-    console.error('Erro ao obter dados do usuário:', error);
+    console.log('Erro ao buscar dados:', error);
     return null;
   }
 };
 
-// Função de logout (já existente, apenas para referência)
 export const logoutUser = async () => {
   try {
-    await AsyncStorage.removeItem('userData');
-    // Adicione aqui qualquer outra limpeza necessária
+    await AsyncStorage.removeItem('user');
+    await AsyncStorage.removeItem('currentSection');
+    await AsyncStorage.removeItem('tipoSecao');
+    await AsyncStorage.removeItem('selectedLoja');
   } catch (error) {
-    console.error('Erro ao fazer logout:', error);
-    throw error;
+    console.log('Erro ao fazer logout:', error);
   }
 };
 
