@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   View, 
   Text, 
@@ -8,10 +8,13 @@ import {
   TouchableOpacity, 
   ActivityIndicator, 
   Alert,
-  ScrollView
+  ScrollView,
+  TextInput,
+  Modal,
+  Pressable
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { getCurrentSection } from '../auth';
+import { getCurrentSection, getUserData } from '../auth';
 import { useIsFocused } from '@react-navigation/native';
 import axios from 'axios';
 
@@ -24,6 +27,11 @@ const Sacola = ({ navigation }) => {
   const [total, setTotal] = useState(0);
   const [totalPontos, setTotalPontos] = useState(0);
   const [expandedCombos, setExpandedCombos] = useState({});
+  const [cupom, setCupom] = useState('');
+  const [modalVisible, setModalVisible] = useState(false);
+  const [cupomInfo, setCupomInfo] = useState(null);
+  const [descontoAplicado, setDescontoAplicado] = useState(0);
+  const [userCpf, setUserCpf] = useState(null);
   const isFocused = useIsFocused();
 
   // Cores padrão
@@ -42,24 +50,17 @@ const Sacola = ({ navigation }) => {
   const VALOR_BASE_COMBO = 53.00;
   const SALADA_IMAGE = 'https://yacsu77.blob.core.windows.net/acompa/Prancheta%201.png';
 
-  useEffect(() => {
-    if (isFocused) {
-      carregarSacola();
-    }
-  }, [isFocused]);
-
-  const toggleCombo = (comboId) => {
-    setExpandedCombos(prev => ({
-      ...prev,
-      [comboId]: !prev[comboId]
-    }));
-  };
-
-  const carregarSacola = async () => {
+  const carregarSacola = useCallback(async () => {
     try {
       setLoading(true);
       const secao = await getCurrentSection();
       setSectionInfo(secao);
+
+      // Carrega dados do usuário para pegar o CPF
+      const userData = await getUserData();
+      if (userData && userData.CPF) {
+        setUserCpf(userData.CPF);
+      }
 
       if (secao && secao.id) {
         // Carrega produtos normais
@@ -91,6 +92,19 @@ const Sacola = ({ navigation }) => {
     } finally {
       setLoading(false);
     }
+  }, []);
+
+  useEffect(() => {
+    if (isFocused) {
+      carregarSacola();
+    }
+  }, [isFocused, carregarSacola]);
+
+  const toggleCombo = (comboId) => {
+    setExpandedCombos(prev => ({
+      ...prev,
+      [comboId]: !prev[comboId]
+    }));
   };
 
   const agruparProdutos = (produtos) => {
@@ -134,7 +148,10 @@ const Sacola = ({ navigation }) => {
     // Soma dos pontos das promoções
     const somaPontos = promocoes.reduce((acc, item) => acc + parseFloat(item.custo_pontos || 0), 0);
     
-    setTotal((somaProdutos + somaCombos + taxaEntrega).toFixed(2));
+    const totalSemDesconto = somaProdutos + somaCombos + taxaEntrega;
+    const totalComDesconto = totalSemDesconto - descontoAplicado;
+    
+    setTotal(totalComDesconto > 0 ? totalComDesconto.toFixed(2) : '0.00');
     setTotalPontos(somaPontos);
   };
 
@@ -185,6 +202,67 @@ const Sacola = ({ navigation }) => {
     } catch (error) {
       console.error('Erro ao adicionar promoção:', error);
       Alert.alert('Erro', 'Não foi possível adicionar a promoção');
+    }
+  };
+
+  const validarCupom = async () => {
+    if (!cupom) {
+      Alert.alert('Atenção', 'Por favor, insira um código de cupom');
+      return;
+    }
+
+    try {
+      if (!userCpf) {
+        Alert.alert('Erro', 'Não foi possível identificar seu CPF');
+        return;
+      }
+
+      const response = await axios.post('https://sivpt-betaapi.onrender.com/api/sacola/cupom/validar', {
+        cpf_cliente: userCpf,
+        codigo_cupom: cupom
+      });
+
+      setCupomInfo(response.data);
+      setModalVisible(true);
+    } catch (error) {
+      console.error('Erro ao validar cupom:', error);
+      if (error.response && error.response.data && error.response.data.message) {
+        Alert.alert('Erro', error.response.data.message);
+      } else {
+        Alert.alert('Erro', 'Não foi possível validar o cupom');
+      }
+    }
+  };
+
+  const aplicarCupom = async () => {
+    try {
+      if (!userCpf) {
+        Alert.alert('Erro', 'Não foi possível identificar seu CPF');
+        return;
+      }
+
+      // Primeiro ativa o cupom
+      await axios.post('https://sivpt-betaapi.onrender.com/api/sacola/cupom/ativar', {
+        cpf_cliente: userCpf,
+        id_cupom: cupomInfo.id
+      });
+
+      // Calcula o desconto
+      let desconto = 0;
+      if (cupomInfo.tipo === 1) { // Valor fixo
+        desconto = parseFloat(cupomInfo.valor);
+      } else if (cupomInfo.tipo === 2) { // Porcentagem
+        const totalSemDesconto = parseFloat(total) + parseFloat(descontoAplicado);
+        desconto = totalSemDesconto * (parseFloat(cupomInfo.valor) / 100);
+      }
+
+      setDescontoAplicado(desconto);
+      carregarSacola();
+      setModalVisible(false);
+      Alert.alert('Sucesso', `Cupom aplicado com sucesso! Desconto de R$ ${desconto.toFixed(2)}`);
+    } catch (error) {
+      console.error('Erro ao aplicar cupom:', error);
+      Alert.alert('Erro', 'Não foi possível aplicar o cupom');
     }
   };
 
@@ -329,7 +407,9 @@ const Sacola = ({ navigation }) => {
       total, 
       totalPontos,
       promocoes,
-      combos
+      combos,
+      descontoAplicado,
+      cupomInfo
     });
   };
 
@@ -401,11 +481,33 @@ const Sacola = ({ navigation }) => {
               </>
             )}
             
+            <View style={[styles.cupomContainer, { marginTop: 20 }]}>
+              <TextInput
+                style={styles.cupomInput}
+                placeholder="Digite seu cupom de desconto"
+                value={cupom}
+                onChangeText={setCupom}
+              />
+              <TouchableOpacity 
+                style={[styles.botaoCupom, { backgroundColor: colors.secondary }]}
+                onPress={validarCupom}
+              >
+                <Text style={[styles.textoBotaoCupom, { color: colors.white }]}>Aplicar</Text>
+              </TouchableOpacity>
+            </View>
+            
             <View style={[styles.resumoContainer, { backgroundColor: colors.white }]}>
               {sectionInfo?.tipo === '2' && (produtos.length > 0 || combos.length > 0) && (
                 <View style={styles.linhaResumo}>
                   <Text style={{ color: colors.text }}>Taxa de entrega:</Text>
                   <Text style={{ color: colors.text }}>R$ {TAXA_ENTREGA.toFixed(2)}</Text>
+                </View>
+              )}
+              
+              {descontoAplicado > 0 && (
+                <View style={styles.linhaResumo}>
+                  <Text style={{ color: colors.text }}>Desconto:</Text>
+                  <Text style={{ color: colors.primary }}>- R$ {descontoAplicado.toFixed(2)}</Text>
                 </View>
               )}
               
@@ -435,6 +537,52 @@ const Sacola = ({ navigation }) => {
           </Text>
         </TouchableOpacity>
       )}
+
+      {/* Modal de confirmação do cupom */}
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={modalVisible}
+        onRequestClose={() => {
+          setModalVisible(!modalVisible);
+        }}
+      >
+        <View style={styles.centeredView}>
+          <View style={styles.modalView}>
+            <Text style={styles.modalTitle}>Confirmar Cupom</Text>
+            
+            <Text style={styles.modalText}>
+              Você está prestes a usar o cupom <Text style={styles.cupomCode}>{cupomInfo?.cupom}</Text>.
+            </Text>
+            
+            <Text style={styles.modalText}>
+              {cupomInfo?.tipo === 1 
+                ? `Desconto de R$ ${parseFloat(cupomInfo?.valor).toFixed(2)}` 
+                : `Desconto de ${cupomInfo?.valor}%`}
+            </Text>
+            
+            <Text style={styles.modalWarning}>
+              Após a confirmação, você não poderá usar este cupom novamente.
+            </Text>
+            
+            <View style={styles.modalButtons}>
+              <Pressable
+                style={[styles.modalButton, styles.cancelButton]}
+                onPress={() => setModalVisible(false)}
+              >
+                <Text style={styles.modalButtonText}>Cancelar</Text>
+              </Pressable>
+              
+              <Pressable
+                style={[styles.modalButton, styles.confirmButton]}
+                onPress={aplicarCupom}
+              >
+                <Text style={styles.modalButtonText}>Confirmar</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -629,7 +777,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   resumoContainer: {
-    marginTop: 20,
+    marginTop: 10,
     padding: 15,
     borderRadius: 8,
     shadowColor: '#000',
@@ -669,6 +817,94 @@ const styles = StyleSheet.create({
   },
   textoBotao: {
     fontSize: 18,
+    fontWeight: 'bold',
+  },
+  cupomContainer: {
+    flexDirection: 'row',
+    marginBottom: 10,
+  },
+  cupomInput: {
+    flex: 1,
+    height: 40,
+    borderColor: '#ccc',
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    marginRight: 10,
+  },
+  botaoCupom: {
+    paddingHorizontal: 15,
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  textoBotaoCupom: {
+    fontWeight: 'bold',
+  },
+  // Modal styles
+  centeredView: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+  },
+  modalView: {
+    margin: 20,
+    backgroundColor: 'white',
+    borderRadius: 10,
+    padding: 20,
+    width: '80%',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginBottom: 15,
+    textAlign: 'center',
+  },
+  modalText: {
+    fontSize: 16,
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+  cupomCode: {
+    fontWeight: 'bold',
+    color: '#2ecc71',
+  },
+  modalWarning: {
+    fontSize: 14,
+    color: '#e74c3c',
+    marginVertical: 15,
+    textAlign: 'center',
+    fontWeight: 'bold',
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 15,
+  },
+  modalButton: {
+    borderRadius: 8,
+    padding: 10,
+    width: '48%',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  cancelButton: {
+    backgroundColor: '#e0e0e0',
+  },
+  confirmButton: {
+    backgroundColor: '#2ecc71',
+  },
+  modalButtonText: {
+    color: 'white',
     fontWeight: 'bold',
   },
 });
