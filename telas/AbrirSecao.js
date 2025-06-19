@@ -7,9 +7,13 @@ import {
   ActivityIndicator,
   Alert,
   StyleSheet,
-  ScrollView
+  ScrollView,
+  Modal,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform
 } from 'react-native';
-import { getUserData, getCurrentSection, clearCurrentSection } from '../auth';
+import { getUserData, getCurrentSection, clearCurrentSection, updateUserLocal } from '../auth';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
@@ -21,6 +25,13 @@ const AbrirSecao = ({ navigation }) => {
   const [selectedLoja, setSelectedLoja] = useState(null);
   const [userData, setUserData] = useState(null);
   const [currentSection, setCurrentSection] = useState(null);
+  const [showAddressModal, setShowAddressModal] = useState(false);
+  const [editingAddress, setEditingAddress] = useState(false);
+  const [cep, setCep] = useState('');
+  const [numero, setNumero] = useState('');
+  const [complemento, setComplemento] = useState('');
+  const [loadingCep, setLoadingCep] = useState(false);
+  const [endereco, setEndereco] = useState('');
 
   useEffect(() => {
     const checkSection = async () => {
@@ -34,6 +45,12 @@ const AbrirSecao = ({ navigation }) => {
     const loadUserData = async () => {
       const data = await getUserData();
       setUserData(data);
+      if (data) {
+        setCep(data.Cep_Cli || '');
+        setEndereco(data.Endereco_Cli ? data.Endereco_Cli.split(', ').slice(0, -1).join(', ') : '');
+        setNumero(data.Endereco_Cli ? data.Endereco_Cli.split(', ').pop() : '');
+        setComplemento(data.complemento || '');
+      }
     };
     loadUserData();
   }, []);
@@ -75,7 +92,81 @@ const AbrirSecao = ({ navigation }) => {
     }
   };
 
-  const handleCriarSecao = async () => {
+  const buscarEnderecoPorCep = async () => {
+    const cepLimpo = cep.replace(/\D/g, '');
+    if (cepLimpo.length !== 8) {
+      Alert.alert('CEP inválido', 'Por favor, digite um CEP válido com 8 dígitos');
+      return;
+    }
+
+    setLoadingCep(true);
+    try {
+      const response = await axios.get(`https://viacep.com.br/ws/${cepLimpo}/json/`);
+      if (response.data.erro) {
+        Alert.alert('CEP não encontrado', 'O CEP digitado não foi encontrado na base de dados');
+        return;
+      }
+      
+      const { logradouro, bairro, localidade, uf } = response.data;
+      const enderecoCompleto = `${logradouro}, ${bairro}, ${localidade} - ${uf}`;
+      setEndereco(enderecoCompleto);
+    } catch (error) {
+      console.error('Erro ao buscar CEP:', error);
+      Alert.alert('Erro', 'Não foi possível buscar o endereço para este CEP');
+    } finally {
+      setLoadingCep(false);
+    }
+  };
+
+  const salvarEndereco = async () => {
+    if (!cep || !endereco || !numero) {
+      Alert.alert('Campos obrigatórios', 'CEP, Endereço e Número são obrigatórios');
+      return;
+    }
+
+    try {
+      const enderecoCompleto = `${endereco}, ${numero}` + (complemento ? ` - ${complemento}` : '');
+      
+      // Atualização no servidor
+      const response = await axios.put(
+        `https://sivpt-betaapi.onrender.com/api/users/${userData.CPF}/endereco`,
+        {
+          endereco: enderecoCompleto,
+          cep,
+          complemento
+        }
+      );
+
+      if (response.data.message) {
+        // Atualização local com o novo endereço
+        const updatedUser = await updateUserLocal({
+          Endereco_Cli: enderecoCompleto,
+          Cep_Cli: cep,
+          complemento: complemento || ''
+        });
+        
+        // Atualiza o estado com o usuário retornado pela função updateUserLocal
+        setUserData(updatedUser);
+        
+        Alert.alert('Sucesso', 'Endereço atualizado com sucesso!');
+        setEditingAddress(false);
+        setShowAddressModal(false);
+      }
+    } catch (error) {
+      console.error('Erro ao atualizar endereço:', error);
+      Alert.alert('Erro', 'Não foi possível atualizar o endereço');
+    }
+  };
+
+  const verificarEnderecoEntrega = () => {
+    if (tipoSecao === 'entrega') {
+      setShowAddressModal(true);
+    } else {
+      criarSecao();
+    }
+  };
+
+  const criarSecao = async () => {
     if (!selectedLoja || !tipoSecao || !userData) {
       Alert.alert('Atenção', 'Selecione uma loja para continuar');
       return;
@@ -193,7 +284,7 @@ const AbrirSecao = ({ navigation }) => {
             {selectedLoja && (
               <TouchableOpacity
                 style={styles.botaoConfirmar}
-                onPress={handleCriarSecao}
+                onPress={verificarEnderecoEntrega}
                 disabled={loading}
               >
                 {loading ? (
@@ -228,6 +319,113 @@ const AbrirSecao = ({ navigation }) => {
           </View>
         )}
       </ScrollView>
+
+      {/* Modal de confirmação de endereço */}
+      <Modal
+        visible={showAddressModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowAddressModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <KeyboardAvoidingView 
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={styles.keyboardAvoidingView}
+          >
+            <View style={styles.modalContainer}>
+              {!editingAddress ? (
+                <>
+                  <Text style={styles.modalTitle}>Confirme o endereço de entrega</Text>
+                  <Text style={styles.modalText}>
+                    O endereço cadastrado é: {userData?.Endereco_Cli}
+                  </Text>
+                  {userData?.complemento && (
+                    <Text style={styles.modalText}>
+                      Complemento: {userData.complemento}
+                    </Text>
+                  )}
+                  <Text style={styles.modalText}>CEP: {userData?.Cep_Cli}</Text>
+
+                  <View style={styles.modalButtons}>
+                    <TouchableOpacity 
+                      style={styles.modalButtonSecondary}
+                      onPress={() => setEditingAddress(true)}
+                    >
+                      <Text style={styles.modalButtonTextSecondary}>Alterar Endereço</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity 
+                      style={styles.modalButtonPrimary}
+                      onPress={criarSecao}
+                    >
+                      <Text style={styles.modalButtonTextPrimary}>Confirmar Endereço</Text>
+                    </TouchableOpacity>
+                  </View>
+                </>
+              ) : (
+                <>
+                  <Text style={styles.modalTitle}>Editar Endereço</Text>
+                  
+                  <Text style={styles.formLabel}>CEP</Text>
+                  <View style={styles.cepContainer}>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Digite seu CEP"
+                      value={cep}
+                      onChangeText={setCep}
+                      keyboardType="numeric"
+                      onBlur={buscarEnderecoPorCep}
+                    />
+                    {loadingCep && (
+                      <ActivityIndicator size="small" color="#FF6D00" style={styles.cepLoading} />
+                    )}
+                  </View>
+
+                  <Text style={styles.formLabel}>Endereço</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Endereço completo"
+                    value={endereco}
+                    onChangeText={setEndereco}
+                    editable={!!endereco}
+                  />
+
+                  <Text style={styles.formLabel}>Número</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Número"
+                    value={numero}
+                    onChangeText={setNumero}
+                    keyboardType="numeric"
+                  />
+
+                  <Text style={styles.formLabel}>Complemento (opcional)</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Complemento"
+                    value={complemento}
+                    onChangeText={setComplemento}
+                  />
+
+                  <View style={styles.formButtons}>
+                    <TouchableOpacity 
+                      style={styles.cancelButton} 
+                      onPress={() => setEditingAddress(false)}
+                    >
+                      <Text style={styles.cancelButtonText}>Cancelar</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity 
+                      style={styles.saveButton} 
+                      onPress={salvarEndereco}
+                    >
+                      <Text style={styles.saveButtonText}>Salvar</Text>
+                    </TouchableOpacity>
+                  </View>
+                </>
+              )}
+            </View>
+          </KeyboardAvoidingView>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -353,7 +551,121 @@ const styles = StyleSheet.create({
     fontSize: 16,
     marginBottom: 8,
     color: '#555'
-  }
+  },
+  // Estilos para o modal
+  modalOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  modalContainer: {
+    width: '90%',
+    backgroundColor: 'white',
+    borderRadius: 10,
+    padding: 20,
+    maxHeight: '80%',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 15,
+    color: '#333',
+    textAlign: 'center'
+  },
+  modalText: {
+    fontSize: 16,
+    marginBottom: 10,
+    color: '#555'
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 20
+  },
+  modalButtonPrimary: {
+    backgroundColor: '#FFA726',
+    padding: 12,
+    borderRadius: 8,
+    flex: 1,
+    marginLeft: 10,
+    alignItems: 'center'
+  },
+  modalButtonSecondary: {
+    backgroundColor: '#e0e0e0',
+    padding: 12,
+    borderRadius: 8,
+    flex: 1,
+    marginRight: 10,
+    alignItems: 'center'
+  },
+  modalButtonTextPrimary: {
+    color: 'white',
+    fontWeight: '600'
+  },
+  modalButtonTextSecondary: {
+    color: '#333',
+    fontWeight: '600'
+  },
+  // Estilos para o formulário de endereço
+  keyboardAvoidingView: {
+    flex: 1,
+    justifyContent: 'center',
+    width: '100%',
+  },
+  formLabel: {
+    fontSize: 12,
+    color: '#757575',
+    marginBottom: 5,
+    marginTop: 10,
+  },
+  input: {
+    backgroundColor: '#F5F5F5',
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+    color: '#333',
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    marginBottom: 10,
+  },
+  cepContainer: {
+    position: 'relative',
+  },
+  cepLoading: {
+    position: 'absolute',
+    right: 10,
+    top: 12,
+  },
+  formButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 20,
+  },
+  cancelButton: {
+    backgroundColor: '#E0E0E0',
+    padding: 14,
+    borderRadius: 8,
+    flex: 1,
+    marginRight: 10,
+    alignItems: 'center',
+  },
+  cancelButtonText: {
+    color: '#333',
+    fontWeight: '600',
+  },
+  saveButton: {
+    backgroundColor: '#FF6D00',
+    padding: 14,
+    borderRadius: 8,
+    flex: 1,
+    marginLeft: 10,
+    alignItems: 'center',
+  },
+  saveButtonText: {
+    color: 'white',
+    fontWeight: '600',
+  },
 });
 
 export default AbrirSecao;
