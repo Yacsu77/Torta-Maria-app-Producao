@@ -17,8 +17,8 @@ export const updateUserLocal = async (updates) => {
     // Atualizar os dados
     const updatedUser = { ...currentUserData, ...updates };
     
-    // Salvar no AsyncStorage
-    await AsyncStorage.setItem('userData', JSON.stringify(updatedUser));
+    // Salvar no AsyncStorage (corrigido para usar a chave 'user' em vez de 'userData')
+    await AsyncStorage.setItem('user', JSON.stringify(updatedUser));
     
     return updatedUser;
   } catch (error) {
@@ -27,13 +27,23 @@ export const updateUserLocal = async (updates) => {
   }
 };
 
-
 export const getUserData = async () => {
   try {
     const data = await AsyncStorage.getItem('user');
     return data ? JSON.parse(data) : null;
   } catch (error) {
     console.log('Erro ao buscar dados:', error);
+    return null;
+  }
+};
+
+// Função específica para obter a foto do usuário
+export const getUserPhoto = async () => {
+  try {
+    const userData = await getUserData();
+    return userData?.foto || null;
+  } catch (error) {
+    console.log('Erro ao buscar foto do usuário:', error);
     return null;
   }
 };
