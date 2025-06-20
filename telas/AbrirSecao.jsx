@@ -56,6 +56,12 @@ const AbrirSecao = ({ navigation }) => {
   }, []);
 
   useEffect(() => {
+    if (cep.length === 8 && !isNaN(cep)) {
+      buscarEnderecoPorCep();
+    }
+  }, [cep]);
+
+  useEffect(() => {
     if (tipoSecao) {
       fetchLojas();
     }
@@ -95,7 +101,6 @@ const AbrirSecao = ({ navigation }) => {
   const buscarEnderecoPorCep = async () => {
     const cepLimpo = cep.replace(/\D/g, '');
     if (cepLimpo.length !== 8) {
-      Alert.alert('CEP inválido', 'Por favor, digite um CEP válido com 8 dígitos');
       return;
     }
 
@@ -373,7 +378,7 @@ const AbrirSecao = ({ navigation }) => {
                       value={cep}
                       onChangeText={setCep}
                       keyboardType="numeric"
-                      onBlur={buscarEnderecoPorCep}
+                      maxLength={8}
                     />
                     {loadingCep && (
                       <ActivityIndicator size="small" color="#FF6D00" style={styles.cepLoading} />
@@ -381,13 +386,9 @@ const AbrirSecao = ({ navigation }) => {
                   </View>
 
                   <Text style={styles.formLabel}>Endereço</Text>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Endereço completo"
-                    value={endereco}
-                    onChangeText={setEndereco}
-                    editable={!!endereco}
-                  />
+                  <View style={styles.readOnlyInputContainer}>
+                    <Text style={styles.readOnlyInput}>{endereco || 'O endereço será preenchido automaticamente'}</Text>
+                  </View>
 
                   <Text style={styles.formLabel}>Número</Text>
                   <TextInput
@@ -409,7 +410,16 @@ const AbrirSecao = ({ navigation }) => {
                   <View style={styles.formButtons}>
                     <TouchableOpacity 
                       style={styles.cancelButton} 
-                      onPress={() => setEditingAddress(false)}
+                      onPress={() => {
+                        setEditingAddress(false);
+                        // Resetar para os valores originais ao cancelar
+                        if (userData) {
+                          setCep(userData.Cep_Cli || '');
+                          setEndereco(userData.Endereco_Cli ? userData.Endereco_Cli.split(', ').slice(0, -1).join(', ') : '');
+                          setNumero(userData.Endereco_Cli ? userData.Endereco_Cli.split(', ').pop() : '');
+                          setComplemento(userData.complemento || '');
+                        }
+                      }}
                     >
                       <Text style={styles.cancelButtonText}>Cancelar</Text>
                     </TouchableOpacity>
@@ -437,6 +447,7 @@ const styles = StyleSheet.create({
   },
   scrollContainer: {
     padding: 20,
+    paddingBottom: 40, // Adicionado para evitar que os botões fiquem muito próximos da borda
   },
   header: {
     flexDirection: 'row',
@@ -515,7 +526,8 @@ const styles = StyleSheet.create({
     padding: 15,
     borderRadius: 12,
     alignItems: 'center',
-    marginTop: 20
+    marginTop: 20,
+    marginBottom: 10,
   },
   textoConfirmar: {
     color: '#fff',
@@ -559,12 +571,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
   },
+  keyboardAvoidingView: {
+    width: '100%',
+    alignItems: 'center',
+  },
   modalContainer: {
     width: '90%',
     backgroundColor: 'white',
     borderRadius: 10,
     padding: 20,
-    maxHeight: '80%',
+    maxHeight: '90%',
   },
   modalTitle: {
     fontSize: 18,
@@ -608,13 +624,8 @@ const styles = StyleSheet.create({
     fontWeight: '600'
   },
   // Estilos para o formulário de endereço
-  keyboardAvoidingView: {
-    flex: 1,
-    justifyContent: 'center',
-    width: '100%',
-  },
   formLabel: {
-    fontSize: 12,
+    fontSize: 14,
     color: '#757575',
     marginBottom: 5,
     marginTop: 10,
@@ -628,6 +639,20 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E0E0E0',
     marginBottom: 10,
+  },
+  readOnlyInputContainer: {
+    backgroundColor: '#F5F5F5',
+    borderRadius: 8,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    marginBottom: 10,
+    minHeight: 48,
+    justifyContent: 'center',
+  },
+  readOnlyInput: {
+    fontSize: 16,
+    color: '#333',
   },
   cepContainer: {
     position: 'relative',
