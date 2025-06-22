@@ -209,20 +209,42 @@ const Pagamento = () => {
     }
   };
 
-  const atualizarSituacaoPedido = async (pedidoId, situacao) => {
-    try {
-      console.log(`[PEDIDO] Atualizando situação do pedido ${pedidoId} para ${situacao}`);
-      const response = await apiPedidos.put(`/pedido/atualizar-situacao/${pedidoId}`, {
-        novaSituacao: situacao
-      });
-      
-      console.log('[PEDIDO] Situação do pedido atualizada:', response.data);
-      return true;
-    } catch (error) {
-      console.error('Erro ao atualizar situação do pedido:', error.response?.data || error.message);
-      return false;
+const obterIdPedidoPorSecao = async (idSecao) => {
+  try {
+    console.log(`[PEDIDO] Buscando ID do pedido para a seção: ${idSecao}`);
+    const response = await apiPedidos.get(`/secao/pedido/por-secao/${idSecao}`);
+    
+    if (!response.data || !response.data.id) {
+      throw new Error('ID do pedido não encontrado para esta seção');
     }
-  };
+    
+    console.log(`[PEDIDO] ID do pedido encontrado: ${response.data.id}`);
+    return response.data.id;
+  } catch (error) {
+    console.error('[PEDIDO] Erro ao buscar ID do pedido:', {
+      message: error.message,
+      response: error.response?.data,
+      status: error.response?.status
+    });
+    throw error;
+  }
+};
+
+
+const atualizarSituacaoPedido = async (pedidoId, situacao) => {
+  try {
+    console.log(`[PEDIDO] Atualizando situação do pedido ${pedidoId} para ${situacao}`);
+    const response = await apiPedidos.put(`/pedido/atualizar-situacao/${pedidoId}`, {
+      novaSituacao: situacao
+    });
+    
+    console.log('[PEDIDO] Resposta da atualização:', response.data);
+    return true;
+  } catch (error) {
+    console.error('[PEDIDO] Erro ao atualizar situação do pedido:', error);
+    return false;
+  }
+};
 
   const validateCard = () => {
     if (!cardComplete) {
@@ -402,17 +424,53 @@ const Pagamento = () => {
     }
   };
 
-  const handlePaymentApproval = async () => {
-    console.log('[PAGAMENTO] Pagamento aprovado, atualizando situação do pedido...');
-    const atualizado = await atualizarSituacaoPedido(pedidoId, 2);
+const handlePaymentApproval = async () => {
+  console.log('[PAGAMENTO] Pagamento aprovado, buscando ID do pedido...');
+  
+  try {
+    // 1. Buscamos o ID do pedido usando o id_secao (que é o pedidoId recebido)
+    const idPedido = await obterIdPedidoPorSecao(pedidoId);
+    
+    if (!idPedido) {
+      throw new Error('ID do pedido não encontrado para esta seção');
+    }
+
+    console.log(`[PAGAMENTO] ID do pedido encontrado: ${idPedido}`);
+    
+    // 2. Atualizamos a situação do pedido encontrado
+    console.log(`[PAGAMENTO] Atualizando situação do pedido ${idPedido}...`);
+    const atualizado = await atualizarSituacaoPedido(idPedido, 2);
     
     if (atualizado) {
+      // 3. Adicionar pontos ao cliente (valor pago * 100)
+      if (userData?.CPF) {
+        const pontos = parseFloat(valor) * 100;
+        console.log(`[PONTOS] Adicionando ${pontos} pontos para o cliente ${userData.CPF}`);
+        
+        try {
+          await apiPedidos.post('/pontos/pontos/adicionar', {
+            Cliente_CPF: userData.CPF,
+            Pontos: pontos
+          });
+          console.log('[PONTOS] Pontos adicionados com sucesso');
+        } catch (error) {
+          console.error('[PONTOS] Erro ao adicionar pontos:', error);
+          // Não vamos bloquear o fluxo por erro nos pontos, apenas logamos
+        }
+      }
+
       setModalVisible(true);
     } else {
       Alert.alert('Atenção', 'Pagamento aprovado, mas houve um problema ao atualizar o pedido. Contate o suporte.');
     }
-  };
-
+  } catch (error) {
+    console.error('[PAGAMENTO] Erro no processo de aprovação:', error);
+    Alert.alert(
+      'Erro', 
+      'Pagamento aprovado, mas não foi possível atualizar o pedido. Contate o suporte com o código do pagamento.'
+    );
+  }
+};
   const copyToClipboard = async (text) => {
     try {
       await Clipboard.setStringAsync(text);
