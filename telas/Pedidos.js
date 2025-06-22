@@ -69,41 +69,41 @@ const ListaPedidos = () => {
     }
   };
 
-const cancelarPedido = async (pedidoId) => {
-  try {
-    setLoading(true);
-    
-    if (!pedidoId) {
-      throw new Error('ID do pedido não fornecido');
+  const cancelarPedido = async (pedidoId) => {
+    try {
+      setLoading(true);
+      
+      if (!pedidoId) {
+        throw new Error('ID do pedido não fornecido');
+      }
+
+      const response = await fetch(`https://sivpt-betaapi.onrender.com/api/pedido/atualizar-situacao/${pedidoId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({
+          novaSituacao: '0' // Ou 0 sem aspas, dependendo do que o backend espera
+        })
+      });
+
+      const responseData = await response.json();
+
+      if (!response.ok) {
+        throw new Error(responseData.erro || responseData.message || `Erro HTTP: ${response.status}`);
+      }
+
+      await fetchPedidos(clienteCpf);
+      Alert.alert('Sucesso', responseData.mensagem || 'Pedido cancelado com sucesso!');
+      
+    } catch (err) {
+      console.error('Erro ao cancelar pedido:', err);
+      Alert.alert('Erro', err.message || 'Falha ao cancelar pedido');
+    } finally {
+      setLoading(false);
     }
-
-    const response = await fetch(`https://sivpt-betaapi.onrender.com/api/pedido/atualizar-situacao/${pedidoId}`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
-      },
-      body: JSON.stringify({
-        novaSituacao: '0' // Ou 0 sem aspas, dependendo do que o backend espera
-      })
-    });
-
-    const responseData = await response.json();
-
-    if (!response.ok) {
-      throw new Error(responseData.erro || responseData.message || `Erro HTTP: ${response.status}`);
-    }
-
-    await fetchPedidos(clienteCpf);
-    Alert.alert('Sucesso', responseData.mensagem || 'Pedido cancelado com sucesso!');
-    
-  } catch (err) {
-    console.error('Erro ao cancelar pedido:', err);
-    Alert.alert('Erro', err.message || 'Falha ao cancelar pedido');
-  } finally {
-    setLoading(false);
-  }
-};
+  };
 
   const confirmarCancelamento = (pedidoId) => {
     Alert.alert(
@@ -140,7 +140,7 @@ const cancelarPedido = async (pedidoId) => {
   const handlePedidoPress = (pedido) => {
     if (pedido.Situacao === 1) {
       navigation.navigate('Pagamento', { 
-        pedidoId: pedido.id,
+        pedidoId: pedido.id_secao,  // Alterado de id para id_secao
         valor: pedido.Valor_pedido 
       });
     }
@@ -173,7 +173,7 @@ const cancelarPedido = async (pedidoId) => {
             <TouchableOpacity 
               style={[styles.botaoAcao, styles.botaoPagar]}
               onPress={() => navigation.navigate('Pagamento', { 
-                pedidoId: item.id,
+                pedidoId: item.id_secao,  // Alterado de id para id_secao
                 valor: parseFloat(item.Valor_pedido || 0)
               })}
             >
