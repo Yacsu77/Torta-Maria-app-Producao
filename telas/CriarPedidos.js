@@ -212,7 +212,7 @@ const CriarPedidos = () => {
 
       // Navega para a tela de pagamento com todas as informações necessárias
       navigation.navigate('Pagamento', { 
-        pedidoId: data.id_pedido, 
+        pedidoId: pedidoData.id_secao, 
         valor: pedidoData.Valor_pedido,
         pontosUtilizados: totalPontos || 0
       });

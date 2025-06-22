@@ -38,9 +38,12 @@ const apiPedidos = axios.create({
   timeout: 30000,
 });
 
-const CREDENTIALS = {
-  publicKey: 'APP_USR-bcf0438f-9524-4bbf-8a2a-423783d4b15e',
-  accessToken: 'APP_USR-2586034623043288-041509-64134ab2bdb6a1368766e88f4966e7d8-1047892153'
+// Removemos as credenciais fixas
+let CREDENTIALS = {
+  publicKey: '',
+  accessToken: '',
+  clientId: '',
+  clientSecret: ''
 };
 
 const COLORS = {
@@ -86,11 +89,66 @@ const Pagamento = () => {
   const [paymentStatus, setPaymentStatus] = useState(null);
   const [paymentId, setPaymentId] = useState(null);
   const [cardComplete, setCardComplete] = useState(false);
+  const [credentialsLoaded, setCredentialsLoaded] = useState(false);
+  const [loadingCredentials, setLoadingCredentials] = useState(true);
   const scrollViewRef = useRef();
 
   const navigation = useNavigation();
   const route = useRoute();
   const { pedidoId, valor, items } = route.params || {};
+
+  // Função para carregar as credenciais do Mercado Pago
+  const loadMercadoPagoCredentials = async () => {
+    console.log('[CREDENCIAIS] Iniciando carregamento das credenciais...');
+    setLoadingCredentials(true);
+    
+    try {
+      // 1. Primeira requisição para obter a seção pelo ID do pedido
+      console.log(`[CREDENCIAIS] Buscando seção para o pedido ID: ${pedidoId}`);
+      const secaoResponse = await apiPedidos.get(`/secao/secao/${pedidoId}`);
+      
+      if (!secaoResponse.data || !secaoResponse.data.CNPJ_loja) {
+        throw new Error('Dados da seção não encontrados ou CNPJ inválido');
+      }
+      
+      const { CNPJ_loja } = secaoResponse.data;
+      console.log(`[CREDENCIAIS] CNPJ da loja encontrado: ${CNPJ_loja}`);
+      
+      // 2. Segunda requisição para obter as credenciais usando o CNPJ
+      console.log(`[CREDENCIAIS] Buscando credenciais para o CNPJ: ${CNPJ_loja}`);
+      const credenciaisResponse = await apiPedidos.get(`/secao/acesso-loja/${CNPJ_loja}`);
+      
+      if (!credenciaisResponse.data) {
+        throw new Error('Credenciais não encontradas para este CNPJ');
+      }
+      
+      // Atualiza as credenciais globais
+      CREDENTIALS = {
+        publicKey: credenciaisResponse.data.PublicKey_MP,
+        accessToken: credenciaisResponse.data.AccessToken_MP,
+        clientId: credenciaisResponse.data.ClientID_MP,
+        clientSecret: credenciaisResponse.data.ClientSecret_MP
+      };
+      
+      console.log('[CREDENCIAIS] Credenciais carregadas com sucesso:', {
+        publicKey: CREDENTIALS.publicKey ? '*** (oculto)' : 'não encontrado',
+        accessToken: CREDENTIALS.accessToken ? '*** (oculto)' : 'não encontrado',
+        clientId: CREDENTIALS.clientId ? '*** (oculto)' : 'não encontrado',
+        clientSecret: CREDENTIALS.clientSecret ? '*** (oculto)' : 'não encontrado'
+      });
+      
+      setCredentialsLoaded(true);
+    } catch (error) {
+      console.error('[CREDENCIAIS] Erro ao carregar credenciais:', error);
+      Alert.alert(
+        'Erro', 
+        'Não foi possível carregar as credenciais de pagamento. Por favor, tente novamente mais tarde.'
+      );
+      navigation.goBack();
+    } finally {
+      setLoadingCredentials(false);
+    }
+  };
 
   useEffect(() => {
     const loadUserData = async () => {
@@ -110,12 +168,13 @@ const Pagamento = () => {
     };
 
     loadUserData();
+    loadMercadoPagoCredentials();
   }, []);
 
   useEffect(() => {
     let intervalId;
     
-    if (paymentId && paymentMethod === 'pix') {
+    if (paymentId && paymentMethod === 'pix' && credentialsLoaded) {
       intervalId = setInterval(() => {
         checkPaymentStatus(paymentId);
       }, 10000);
@@ -124,15 +183,18 @@ const Pagamento = () => {
     return () => {
       if (intervalId) clearInterval(intervalId);
     };
-  }, [paymentId, paymentMethod]);
+  }, [paymentId, paymentMethod, credentialsLoaded]);
 
   const checkPaymentStatus = async (id) => {
     try {
+      console.log(`[PIX] Verificando status do pagamento ID: ${id}`);
       const response = await api.get(`/payments/${id}`, {
         headers: {
           'Authorization': `Bearer ${CREDENTIALS.accessToken}`
         }
       });
+      
+      console.log(`[PIX] Status do pagamento: ${response.data.status}`);
       
       if (response.data.status === 'approved') {
         setPaymentStatus('approved');
@@ -149,11 +211,12 @@ const Pagamento = () => {
 
   const atualizarSituacaoPedido = async (pedidoId, situacao) => {
     try {
+      console.log(`[PEDIDO] Atualizando situação do pedido ${pedidoId} para ${situacao}`);
       const response = await apiPedidos.put(`/pedido/atualizar-situacao/${pedidoId}`, {
         novaSituacao: situacao
       });
       
-      console.log('Situação do pedido atualizada:', response.data);
+      console.log('[PEDIDO] Situação do pedido atualizada:', response.data);
       return true;
     } catch (error) {
       console.error('Erro ao atualizar situação do pedido:', error.response?.data || error.message);
@@ -185,6 +248,7 @@ const Pagamento = () => {
       return await requestFn();
     } catch (error) {
       if (retries <= 0) throw error;
+      console.log(`[RETRY] Tentativa falhou, tentando novamente (${retries} tentativas restantes)`);
       await new Promise(resolve => setTimeout(resolve, delay));
       return retryRequest(requestFn, retries - 1, delay * 2);
     }
@@ -193,10 +257,16 @@ const Pagamento = () => {
   const handleCardPayment = async () => {
     if (!validateCard()) return;
 
+    if (!credentialsLoaded) {
+      Alert.alert('Atenção', 'Credenciais de pagamento ainda não carregadas. Por favor, aguarde.');
+      return;
+    }
+
     setLoading(true);
 
     try {
       // 1. Tokenização do cartão
+      console.log('[CARTAO] Iniciando tokenização do cartão...');
       const tokenResponse = await retryRequest(() => 
         api.post('/card_tokens', {
           card_number: cardData.number?.replace(/\s/g, '') || '',
@@ -222,9 +292,10 @@ const Pagamento = () => {
         throw new Error('Falha ao gerar token do cartão');
       }
 
-      console.log('Token do cartão gerado com sucesso:', tokenResponse.data.id);
+      console.log('[CARTAO] Token do cartão gerado com sucesso:', tokenResponse.data.id);
 
       // 2. Processamento do pagamento
+      console.log('[CARTAO] Processando pagamento...');
       const paymentResponse = await retryRequest(() =>
         api.post('/payments', {
           transaction_amount: parseFloat(valor),
@@ -249,7 +320,7 @@ const Pagamento = () => {
         })
       );
 
-      console.log('✅ Payment ID:', paymentResponse.data.id);
+      console.log('[CARTAO] ✅ Payment ID:', paymentResponse.data.id);
       setPaymentId(paymentResponse.data.id);
 
       if (paymentResponse.data.status === 'approved') {
@@ -258,7 +329,7 @@ const Pagamento = () => {
         Alert.alert('Atenção', `Status: ${paymentResponse.data.status || 'Pagamento não concluído'}`);
       }
     } catch (error) {
-      console.error('Erro no pagamento com cartão:', error.response?.data || error.message);
+      console.error('[CARTAO] Erro no pagamento com cartão:', error.response?.data || error.message);
       Alert.alert(
         'Erro no pagamento', 
         error.response?.data?.message || 
@@ -271,9 +342,15 @@ const Pagamento = () => {
   };
 
   const handlePixPayment = async () => {
+    if (!credentialsLoaded) {
+      Alert.alert('Atenção', 'Credenciais de pagamento ainda não carregadas. Por favor, aguarde.');
+      return;
+    }
+
     setPixLoading(true);
 
     try {
+      console.log('[PIX] Gerando pagamento PIX...');
       const response = await retryRequest(() =>
         api.post('/payments', {
           transaction_amount: parseFloat(valor),
@@ -309,11 +386,16 @@ const Pagamento = () => {
         ticketUrl: response.data.point_of_interaction.transaction_data.ticket_url
       };
 
+      console.log('[PIX] Pagamento PIX gerado com sucesso:', {
+        paymentId: response.data.id,
+        expiration: pixInfo.expiration
+      });
+
       setPixData(pixInfo);
       setPaymentId(response.data.id);
       setModalVisible(true);
     } catch (error) {
-      console.error('Erro no PIX:', error.response?.data || error.message);
+      console.error('[PIX] Erro no PIX:', error.response?.data || error.message);
       Alert.alert('Erro', 'Não foi possível gerar o PIX. Tente novamente mais tarde.');
     } finally {
       setPixLoading(false);
@@ -321,6 +403,7 @@ const Pagamento = () => {
   };
 
   const handlePaymentApproval = async () => {
+    console.log('[PAGAMENTO] Pagamento aprovado, atualizando situação do pedido...');
     const atualizado = await atualizarSituacaoPedido(pedidoId, 2);
     
     if (atualizado) {
@@ -388,6 +471,15 @@ const Pagamento = () => {
   const handleInputFocus = () => {
     scrollViewRef.current?.scrollTo({ y: 200, animated: true });
   };
+
+  if (loadingCredentials) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={COLORS.primary} />
+        <Text style={styles.loadingText}>Carregando informações de pagamento...</Text>
+      </View>
+    );
+  }
 
   return (
     <KeyboardAvoidingView 
@@ -606,6 +698,17 @@ const Pagamento = () => {
 };
 
 const styles = StyleSheet.create({
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#F5F5F5',
+  },
+  loadingText: {
+    marginTop: 20,
+    fontSize: 16,
+    color: '#777777',
+  },
   scrollContainer: {
     flexGrow: 1,
     paddingBottom: 20,
