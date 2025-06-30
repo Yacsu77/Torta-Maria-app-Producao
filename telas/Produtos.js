@@ -113,8 +113,7 @@ const Produtos = ({ route, navigation }) => {
   useEffect(() => {
     const filtered = produtos.filter(produto => {
       const matchesCategory = categoriaSelecionada ? produto.categoria_id === categoriaSelecionada : true;
-      const matchesSearch = produto.nome_produto.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                          produto.descricao_produto.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesSearch = produto.nome_produto.toLowerCase().includes(searchQuery.toLowerCase());
       return matchesCategory && matchesSearch;
     });
     setProdutosFiltrados(filtered);
@@ -322,7 +321,6 @@ const Produtos = ({ route, navigation }) => {
                   />
                   <View style={styles.produtoInfo}>
                     <Text style={[styles.produtoNome, { color: colors.text }]}>{produto.nome_produto}</Text>
-                    <Text style={[styles.produtoDescricao, { color: colors.textLight }]}>{produto.descricao_produto}</Text>
                     <Text style={[styles.produtoPreco, { color: colors.primary }]}>{formatarPreco(produto.preco_produto)}</Text>
                   </View>
                   <TouchableOpacity 
@@ -505,10 +503,6 @@ const styles = StyleSheet.create({
   produtoNome: {
     fontSize: 16,
     fontWeight: 'bold',
-    marginBottom: 5,
-  },
-  produtoDescricao: {
-    fontSize: 14,
     marginBottom: 5,
   },
   produtoPreco: {
