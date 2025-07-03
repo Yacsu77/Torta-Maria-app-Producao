@@ -27,7 +27,8 @@ const CriarPedidos = () => {
     id_secao: null,
     Tipo_Pedido: 1,
     Data_pedido: moment().format('DD/MM/YYYY'),
-    Hora_Pedido: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    // Inicializa a hora no formato 24h (HH:mm:ss)
+    Hora_Pedido: moment().format('HH:mm:ss'),
     Valor_pedido: total || '0.00',
     Situacao: 1
   });
@@ -39,7 +40,6 @@ const CriarPedidos = () => {
   useEffect(() => {
     const carregarDados = async () => {
       try {
-        // Carrega os dados da seção e do usuário em paralelo
         const [secao, user] = await Promise.all([
           getCurrentSection(),
           getUserData()
@@ -96,7 +96,8 @@ const CriarPedidos = () => {
       }
       
       setSelectedTime(time);
-      const formattedTime = time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      // Formata a hora no formato 24h (HH:mm:ss) usando moment
+      const formattedTime = moment(time).format('HH:mm:ss');
       setPedidoData(prev => ({
         ...prev,
         Hora_Pedido: formattedTime
@@ -117,7 +118,7 @@ const CriarPedidos = () => {
     if (hours < 10 || hours >= 19) {
       Alert.alert(
         'Horário inválido',
-        'Nosso horário de funcionamento é das 10h às 19h. Por favor, selecione um horário dentro deste intervalo.'
+        'Nosso horário de指標: funcionamento é das 10h às 19h. Por favor, selecione um horário dentro deste intervalo.'
       );
       return false;
     }
@@ -137,7 +138,7 @@ const CriarPedidos = () => {
 
   const removerPontosUsuario = async () => {
     if (!userInfo || !userInfo.CPF || !totalPontos || totalPontos <= 0) {
-      return true; // Não há pontos para remover
+      return true;
     }
 
     try {
@@ -171,7 +172,6 @@ const CriarPedidos = () => {
 
     setLoading(true);
     try {
-      // Primeiro remove os pontos se necessário
       if (totalPontos > 0) {
         const pontosRemovidos = await removerPontosUsuario();
         if (!pontosRemovidos) {
@@ -180,16 +180,16 @@ const CriarPedidos = () => {
         }
       }
 
-      // Formata a data para o formato ISO antes de enviar para a API
+      // Formata a data para o formato ISO e a hora para HH:mm:ss
       const dataISO = moment(selectedDate).format('YYYY-MM-DD');
+      const horaFormatada = moment(selectedTime).format('HH:mm:ss');
       
-      // Cria o objeto com os dados formatados para a API
       const pedidoParaAPI = {
         ...pedidoData,
-        Data_pedido: dataISO
+        Data_pedido: dataISO,
+        Hora_Pedido: horaFormatada // Garante o formato correto
       };
 
-      // Depois cria o pedido
       const response = await fetch('https://sivpt-betaapi.onrender.com/api/pedido/inserir', {
         method: 'POST',
         headers: {
@@ -210,7 +210,6 @@ const CriarPedidos = () => {
 
       await clearCurrentSection();
 
-      // Navega para a tela de pagamento com todas as informações necessárias
       navigation.navigate('Pagamento', { 
         pedidoId: pedidoData.id_secao, 
         valor: pedidoData.Valor_pedido,
@@ -321,7 +320,10 @@ const CriarPedidos = () => {
               style={styles.dateTimeButton}
               onPress={showTimepicker}
             >
-              <Text style={styles.dateTimeButtonText}>{pedidoData.Hora_Pedido}</Text>
+              {/* Exibe a hora no formato de exibição, mas armazena em HH:mm:ss */}
+              <Text style={styles.dateTimeButtonText}>
+                {moment(selectedTime).format('HH:mm')}
+              </Text>
             </TouchableOpacity>
             <Text style={styles.horarioInfo}>(10h - 19h)</Text>
           </View>
@@ -427,7 +429,7 @@ const styles = StyleSheet.create({
     borderColor: '#dfe6e9',
   },
   dateTimeButtonText: {
-    color: '#FF7F00', // Alterado para laranja
+    color: '#FF7F00',
     fontSize: 15,
     fontWeight: '500',
   },
@@ -456,12 +458,12 @@ const styles = StyleSheet.create({
     color: '#27ae60',
   },
   botaoPagar: {
-    backgroundColor: '#FF7F00', // Alterado para laranja
+    backgroundColor: '#FF7F00',
     padding: 18,
     borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#FF7F00', // Alterado para laranja
+    shadowColor: '#FF7F00',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 5,
@@ -496,7 +498,7 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   iosButton: {
-    backgroundColor: '#FF7F00', // Alterado para laranja
+    backgroundColor: '#FF7F00',
     paddingVertical: 8,
     paddingHorizontal: 15,
     borderRadius: 5,
