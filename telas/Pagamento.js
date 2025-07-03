@@ -253,7 +253,7 @@ const Pagamento = () => {
     try {
       console.log(`[PEDIDO] Atualizando situação do pedido ${pedidoId} para ${situacao}`);
       const response = await apiPedidos.put(`/pedido/atualizar-situacao/${pedidoId}`, {
-        nowaSituacao: situacao,
+        novaSituacao: situacao,
       });
 
       console.log('[PEDIDO] Resposta da atualização:', response.data);
