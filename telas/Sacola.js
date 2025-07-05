@@ -25,6 +25,7 @@ const Sacola = ({ navigation }) => {
   const [loading, setLoading] = useState(true);
   const [sectionInfo, setSectionInfo] = useState(null);
   const [total, setTotal] = useState(0);
+  const [totalSemDesconto, setTotalSemDesconto] = useState(0);
   const [totalPontos, setTotalPontos] = useState(0);
   const [expandedCombos, setExpandedCombos] = useState({});
   const [cupom, setCupom] = useState('');
@@ -148,9 +149,11 @@ const Sacola = ({ navigation }) => {
     // Soma dos pontos das promoções
     const somaPontos = promocoes.reduce((acc, item) => acc + parseFloat(item.custo_pontos || 0), 0);
     
-    const totalSemDesconto = somaProdutos + somaCombos + taxaEntrega;
-    const totalComDesconto = totalSemDesconto - descontoAplicado;
+    // Calcula totais
+    const totalSemDescontoCalc = somaProdutos + somaCombos + taxaEntrega;
+    const totalComDesconto = totalSemDescontoCalc - descontoAplicado;
     
+    setTotalSemDesconto(totalSemDescontoCalc.toFixed(2));
     setTotal(totalComDesconto > 0 ? totalComDesconto.toFixed(2) : '0.00');
     setTotalPontos(somaPontos);
   };
@@ -158,6 +161,10 @@ const Sacola = ({ navigation }) => {
   const deletarItem = async (id) => {
     try {
       await axios.delete(`https://sivpt-betaapi.onrender.com/api/sacola/deletar/itens/${id}`);
+      // Remove cupom quando um item é deletado
+      if (cupomInfo && descontoAplicado > 0) {
+        await removerCupom();
+      }
       carregarSacola();
     } catch (error) {
       console.error('Erro ao deletar item:', error);
@@ -168,6 +175,10 @@ const Sacola = ({ navigation }) => {
   const deletarCombo = async (id) => {
     try {
       await axios.delete(`https://sivpt-betaapi.onrender.com/api/sacola/deletar/combo/${id}`);
+      // Remove cupom quando um combo é deletado
+      if (cupomInfo && descontoAplicado > 0) {
+        await removerCupom();
+      }
       carregarSacola();
     } catch (error) {
       console.error('Erro ao deletar combo:', error);
@@ -178,6 +189,10 @@ const Sacola = ({ navigation }) => {
   const deletarPromocao = async (id) => {
     try {
       await axios.delete(`https://sivpt-betaapi.onrender.com/api/sacola/deletar/pontos/${id}`);
+      // Remove cupom quando uma promoção é deletada
+      if (cupomInfo && descontoAplicado > 0) {
+        await removerCupom();
+      }
       carregarSacola();
     } catch (error) {
       console.error('Erro ao deletar promoção:', error);
@@ -188,6 +203,10 @@ const Sacola = ({ navigation }) => {
   const adicionarItem = async (ID_secao, Produto) => {
     try {
       await axios.post('https://sivpt-betaapi.onrender.com/api/sacola/inseri/item', { ID_secao, Produto });
+      // Remove cupom quando um item é adicionado
+      if (cupomInfo && descontoAplicado > 0) {
+        await removerCupom();
+      }
       carregarSacola();
     } catch (error) {
       console.error('Erro ao adicionar item:', error);
@@ -198,6 +217,10 @@ const Sacola = ({ navigation }) => {
   const adicionarPromocao = async (ID_secao, Produto_pontos) => {
     try {
       await axios.post('https://sivpt-betaapi.onrender.com/api/sacola/inseri/pontos', { ID_secao, Produto_pontos });
+      // Remove cupom quando uma promoção é adicionada
+      if (cupomInfo && descontoAplicado > 0) {
+        await removerCupom();
+      }
       carregarSacola();
     } catch (error) {
       console.error('Erro ao adicionar promoção:', error);
@@ -236,12 +259,12 @@ const Sacola = ({ navigation }) => {
 
   const aplicarCupom = async () => {
     try {
-      if (!userCpf) {
-        Alert.alert('Erro', 'Não foi possível identificar seu CPF');
+      if (!userCpf || !cupomInfo) {
+        Alert.alert('Erro', 'Não foi possível identificar seu CPF ou cupom');
         return;
       }
 
-      // Primeiro ativa o cupom
+      // Ativa o cupom
       await axios.post('https://sivpt-betaapi.onrender.com/api/sacola/cupom/ativar', {
         cpf_cliente: userCpf,
         id_cupom: cupomInfo.id
@@ -249,21 +272,58 @@ const Sacola = ({ navigation }) => {
 
       // Calcula o desconto
       let desconto = 0;
+      const totalSemDescontoCalc = produtos.reduce((acc, item) => acc + parseFloat(item.preco_produto) * item.quantidade, 0) +
+        combos.reduce((acc, combo) => {
+          let valorCombo = VALOR_BASE_COMBO;
+          if (combo.primeiro_produto_acrescimo) valorCombo += parseFloat(combo.primeiro_produto_acrescimo);
+          if (combo.segundo_produto_acrescimo) valorCombo += parseFloat(combo.segundo_produto_acrescimo);
+          return acc + valorCombo;
+        }, 0) +
+        (sectionInfo?.tipo === '2' && (produtos.length > 0 || combos.length > 0) ? TAXA_ENTREGA : 0);
+
       if (cupomInfo.tipo === 1) { // Valor fixo
         desconto = parseFloat(cupomInfo.valor);
       } else if (cupomInfo.tipo === 2) { // Porcentagem
-        const totalSemDesconto = parseFloat(total) + parseFloat(descontoAplicado);
-        desconto = totalSemDesconto * (parseFloat(cupomInfo.valor) / 100);
+        desconto = totalSemDescontoCalc * (parseFloat(cupomInfo.valor) / 100);
       }
 
       setDescontoAplicado(desconto);
-      carregarSacola();
+      calcularTotais(produtos, combos, promocoes, sectionInfo?.tipo); // Recalcula totais com o desconto
       setModalVisible(false);
       Alert.alert('Sucesso', `Cupom aplicado com sucesso! Desconto de R$ ${desconto.toFixed(2)}`);
     } catch (error) {
       console.error('Erro ao aplicar cupom:', error);
       Alert.alert('Erro', 'Não foi possível aplicar o cupom');
     }
+  };
+
+  const removerCupom = async () => {
+    if (!userCpf || !cupomInfo) {
+      return;
+    }
+
+    try {
+      await axios.delete('https://sivpt-betaapi.onrender.com/api/sacola/cupom/ativo/remover', {
+        data: {
+          cpf_cliente: userCpf,
+          id_cupom: cupomInfo.id
+        }
+      });
+      setDescontoAplicado(0);
+      setCupomInfo(null);
+      setCupom('');
+      calcularTotais(produtos, combos, promocoes, sectionInfo?.tipo); // Recalcula totais após remover cupom
+    } catch (error) {
+      console.error('Erro ao remover cupom:', error);
+      Alert.alert('Erro', 'Não foi possível remover o cupom');
+    }
+  };
+
+  const fecharTela = async () => {
+    if (cupomInfo && descontoAplicado > 0) {
+      await removerCupom();
+    }
+    navigation.goBack();
   };
 
   const renderizarItem = ({ item }) => (
@@ -274,7 +334,6 @@ const Sacola = ({ navigation }) => {
       />
       <View style={styles.infoContainer}>
         <Text style={[styles.nomeProduto, { color: colors.text }]}>{item.nome_produto}</Text>
-        <Text style={[styles.descricaoProduto, { color: colors.textLight }]}>{item.descricao_produto}</Text>
         <Text style={[styles.precoProduto, { color: colors.primary }]}>
           R$ {parseFloat(item.preco_produto).toFixed(2)}
         </Text>
@@ -389,7 +448,6 @@ const Sacola = ({ navigation }) => {
       />
       <View style={styles.infoPromocaoContainer}>
         <Text style={[styles.nomePromocao, { color: colors.secondary }]}>{item.nome_Promocao}</Text>
-        <Text style={[styles.descricaoPromocao, { color: colors.textLight }]}>{item.descricao_promocao}</Text>
         <Text style={[styles.pontosPromocao, { color: colors.primary }]}>{item.custo_pontos} pontos</Text>
       </View>
      
@@ -404,17 +462,13 @@ const Sacola = ({ navigation }) => {
 
   const irParaPagamento = () => {
     navigation.navigate('CriarPedidos', { 
-      total, 
+      total, // Envia apenas o valor com desconto
       totalPontos,
       promocoes,
       combos,
       descontoAplicado,
       cupomInfo
     });
-  };
-
-  const fecharTela = () => {
-    navigation.goBack();
   };
 
   if (loading) {
@@ -503,6 +557,11 @@ const Sacola = ({ navigation }) => {
                   <Text style={{ color: colors.text }}>R$ {TAXA_ENTREGA.toFixed(2)}</Text>
                 </View>
               )}
+              
+              <View style={styles.linhaResumo}>
+                <Text style={{ color: colors.text }}>Subtotal:</Text>
+                <Text style={{ color: colors.text }}>R$ {totalSemDesconto}</Text>
+              </View>
               
               {descontoAplicado > 0 && (
                 <View style={styles.linhaResumo}>
@@ -730,12 +789,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
   },
-  descricaoProduto: {
-    fontSize: 14,
-  },
-  descricaoPromocao: {
-    fontSize: 14,
-  },
   precoProduto: {
     fontSize: 16,
     fontWeight: 'bold',
@@ -841,7 +894,6 @@ const styles = StyleSheet.create({
   textoBotaoCupom: {
     fontWeight: 'bold',
   },
-  // Modal styles
   centeredView: {
     flex: 1,
     justifyContent: 'center',
