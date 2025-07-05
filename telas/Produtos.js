@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { 
   View, 
@@ -10,7 +11,6 @@ import {
   ScrollView, 
   ActivityIndicator,
   RefreshControl,
-  Modal,
   Dimensions 
 } from 'react-native';
 import { getCurrentSection } from '../auth';
@@ -34,7 +34,6 @@ const Produtos = ({ route, navigation }) => {
   const [idSecao, setIdSecao] = useState(null);
   const [lojaSelecionada, setLojaSelecionada] = useState(route.params?.loja || null);
   const [refreshing, setRefreshing] = useState(false);
-  const [showComboModal, setShowComboModal] = useState(false);
 
   // Cores padrão
   const colors = {
@@ -53,25 +52,49 @@ const Produtos = ({ route, navigation }) => {
     setLojaSelecionada(route.params?.loja || null);
   }, [route.params]);
 
-  // Carrega os dados quando a tela recebe foco ou quando a loja muda
+  // Verifica seção a cada 5 segundos
+  useEffect(() => {
+    const interval = setInterval(verificarSecaoAberta, 5000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Carrega os dados quando a tela recebe foco
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', carregarDados);
     return unsubscribe;
-  }, [navigation, lojaSelecionada]);
+  }, [navigation, lojaSelecionada, idSecao]);
+
+  const verificarSecaoAberta = async () => {
+    try {
+      const secao = await getCurrentSection();
+      if (secao) {
+        setIdSecao(secao.id);
+        // Busca dados da seção
+        const secaoResponse = await axios.get(`https://sivpt-betaapi.onrender.com/api/secao/secao/${secao.id}`);
+        const { CNPJ_loja } = secaoResponse.data;
+        setLojaSelecionada({ cnpj: CNPJ_loja });
+        return true;
+      } else {
+        setIdSecao(null);
+        setLojaSelecionada(null);
+        return false;
+      }
+    } catch (err) {
+      console.error('Erro ao verificar seção:', err);
+      return false;
+    }
+  };
 
   const carregarDados = async () => {
     try {
       setLoading(true);
       setError(null);
-      const secao = await getCurrentSection();
-      if (secao) setIdSecao(secao.id);
 
       if (lojaSelecionada) {
-        // Busca APENAS produtos em estoque na loja selecionada
-        const response = await axios.get(`https://sivpt-betaapi.onrender.com/api/produtos/Estoque/Listar/${lojaSelecionada.cnpj}`);
+        // Busca produtos em estoque da loja
+        const response = await axios.get(`https://sivpt-betaapi.onrender.com/api/produtos/Estoque/listar/${lojaSelecionada.cnpj}`);
         
         if (response.data.produtos && response.data.produtos.length > 0) {
-          // Converte para a estrutura de dados esperada
           const produtosFormatados = response.data.produtos.map(p => ({
             id: p.id,
             nome_produto: p.nome,
@@ -83,7 +106,7 @@ const Produtos = ({ route, navigation }) => {
           
           setProdutos(produtosFormatados);
           
-          // Busca apenas categorias dos produtos em estoque
+          // Busca categorias dos produtos em estoque
           const categoriasResponse = await axios.get('https://sivpt-betaapi.onrender.com/api/produtos/Categiria/Listar');
           const categoriasIds = [...new Set(produtosFormatados.map(p => p.categoria_id))];
           setCategorias(categoriasResponse.data.filter(c => categoriasIds.includes(c.id)));
@@ -92,7 +115,7 @@ const Produtos = ({ route, navigation }) => {
           setCategorias([]);
         }
       } else {
-        // Modo sem loja selecionada - lista todos os produtos
+        // Lista todos os produtos quando não há seção aberta
         const [responseCategorias, responseProdutos] = await Promise.all([
           axios.get('https://sivpt-betaapi.onrender.com/api/produtos/Categiria/Listar'),
           axios.get('https://sivpt-betaapi.onrender.com/api/produtos/Produtos/Listar')
@@ -129,25 +152,10 @@ const Produtos = ({ route, navigation }) => {
     return acc;
   }, {});
 
-  const verificarSecaoAberta = async () => {
-    try {
-      const secao = await getCurrentSection();
-      if (secao) {
-        setIdSecao(secao.id);
-        return true;
-      }
-      return false;
-    } catch (err) {
-      console.error('Erro ao verificar seção:', err);
-      return false;
-    }
-  };
-
   const adicionarAoCarrinho = async (produtoId) => {
     const secaoAberta = await verificarSecaoAberta();
     
     if (!secaoAberta) {
-      // Abre a tela de abrir seção como modal
       navigation.navigate('AbrirSeçãoModal');
       return;
     }
@@ -168,7 +176,6 @@ const Produtos = ({ route, navigation }) => {
     const secaoAberta = await verificarSecaoAberta();
     
     if (!secaoAberta) {
-      // Abre a tela de abrir seção como modal
       navigation.navigate('AbrirSeçãoModal');
       return;
     }
@@ -229,18 +236,6 @@ const Produtos = ({ route, navigation }) => {
         style={styles.backgroundImage}
         resizeMode="cover"
       />
-      
-      {lojaSelecionada && (
-        <View style={[styles.lojaInfo, { backgroundColor: colors.primary }]}>
-          <Text style={styles.lojaNome}>{lojaSelecionada.nome}</Text>
-          <Text style={styles.lojaCnpj}>CNPJ: {lojaSelecionada.cnpj}</Text>
-          <Text style={styles.lojaStatus}>
-            {produtos.length > 0 
-              ? `Produtos em estoque: ${produtos.length}` 
-              : 'Nenhum produto em estoque'}
-          </Text>
-        </View>
-      )}
 
       <TextInput
         style={[styles.searchBar, { 
@@ -305,7 +300,6 @@ const Produtos = ({ route, navigation }) => {
           <View style={styles.categoriaSection}>
             <Text style={[styles.categoriaTitulo, { color: colors.primary }]}>{categoria}</Text>
             
-            {/* Renderiza o banner de combo apenas na primeira categoria e quando nenhuma categoria está selecionada */}
             {categoriaSelecionada === null && categoria === Object.keys(produtosPorCategoria)[0] && renderBannerCombo()}
             
             {produtosDaCategoria.map(produto => (
@@ -377,7 +371,7 @@ const styles = StyleSheet.create({
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
-   alignItems: 'center',
+    alignItems: 'center',
   },
   errorContainer: {
     flex: 1,
@@ -397,29 +391,6 @@ const styles = StyleSheet.create({
   retryButtonText: {
     fontSize: 16,
     fontWeight: 'bold',
-  },
-  lojaInfo: {
-    padding: 15,
-    borderRadius: 8,
-    margin: 10,
-    marginBottom: 10,
-  },
-  lojaNome: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 5,
-  },
-  lojaCnpj: {
-    color: '#fff',
-    fontSize: 14,
-    opacity: 0.9,
-    marginBottom: 5,
-  },
-  lojaStatus: {
-    color: '#fff',
-    fontSize: 14,
-    fontStyle匆匆Style: 'italic',
   },
   searchBar: {
     borderRadius: 8,
@@ -471,10 +442,6 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     right: 0,
-    height: 4,
-    backgroundColor: '#e67e22',
-    zIndex: 1,
-    borderRadius: 12,
   },
   bannerComboImage: {
     width: '100%',
