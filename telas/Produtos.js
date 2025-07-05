@@ -164,7 +164,15 @@ const Produtos = ({ route, navigation }) => {
     }
   };
 
-  const abrirDetalhesProduto = (produto) => {
+  const abrirDetalhesProduto = async (produto) => {
+    const secaoAberta = await verificarSecaoAberta();
+    
+    if (!secaoAberta) {
+      // Abre a tela de abrir seção como modal
+      navigation.navigate('AbrirSeçãoModal');
+      return;
+    }
+
     navigation.navigate('DetalheProduto', { produto });
   };
 
@@ -369,7 +377,7 @@ const styles = StyleSheet.create({
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
-    alignItems: 'center',
+   alignItems: 'center',
   },
   errorContainer: {
     flex: 1,
@@ -411,7 +419,7 @@ const styles = StyleSheet.create({
   lojaStatus: {
     color: '#fff',
     fontSize: 14,
-    fontStyle: 'italic',
+    fontStyle匆匆Style: 'italic',
   },
   searchBar: {
     borderRadius: 8,
