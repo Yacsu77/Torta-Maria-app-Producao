@@ -83,9 +83,6 @@ const Sacola = ({ navigation }) => {
         // Carrega promoções
         const responsePromocoes = await axios.get(`https://sivpt-betaapi.onrender.com/api/sacola/listar/pontos/${secao.id}`);
         setPromocoes(responsePromocoes.data);
-        
-        // Calcula totais
-        calcularTotais(produtosAgrupados, responseCombos.data, responsePromocoes.data, secao.tipo);
       }
     } catch (error) {
       console.error('Erro ao carregar sacola:', error);
@@ -100,6 +97,13 @@ const Sacola = ({ navigation }) => {
       carregarSacola();
     }
   }, [isFocused, carregarSacola]);
+
+  // Recalcula totais sempre que produtos, combos, promoções ou desconto mudar
+  useEffect(() => {
+    if (sectionInfo) {
+      calcularTotais();
+    }
+  }, [produtos, combos, promocoes, descontoAplicado, sectionInfo]);
 
   const toggleCombo = (comboId) => {
     setExpandedCombos(prev => ({
@@ -128,7 +132,7 @@ const Sacola = ({ navigation }) => {
     return Object.values(agrupados);
   };
 
-  const calcularTotais = (produtos, combos, promocoes, tipoSecao) => {
+  const calcularTotais = () => {
     // Soma dos produtos normais
     let somaProdutos = produtos.reduce((acc, item) => acc + parseFloat(item.preco_produto) * item.quantidade, 0);
     
@@ -142,7 +146,7 @@ const Sacola = ({ navigation }) => {
     
     // Taxa de entrega se for delivery (só adiciona uma vez)
     let taxaEntrega = 0;
-    if (tipoSecao === '2' && (produtos.length > 0 || combos.length > 0)) {
+    if (sectionInfo?.tipo === '2' && (produtos.length > 0 || combos.length > 0)) {
       taxaEntrega = TAXA_ENTREGA;
     }
     
@@ -151,10 +155,10 @@ const Sacola = ({ navigation }) => {
     
     // Calcula totais
     const totalSemDescontoCalc = somaProdutos + somaCombos + taxaEntrega;
-    const totalComDesconto = totalSemDescontoCalc - descontoAplicado;
+    const totalComDesconto = Math.max(0, totalSemDescontoCalc - descontoAplicado);
     
     setTotalSemDesconto(totalSemDescontoCalc.toFixed(2));
-    setTotal(totalComDesconto > 0 ? totalComDesconto.toFixed(2) : '0.00');
+    setTotal(totalComDesconto.toFixed(2));
     setTotalPontos(somaPontos);
   };
 
@@ -272,14 +276,7 @@ const Sacola = ({ navigation }) => {
 
       // Calcula o desconto
       let desconto = 0;
-      const totalSemDescontoCalc = produtos.reduce((acc, item) => acc + parseFloat(item.preco_produto) * item.quantidade, 0) +
-        combos.reduce((acc, combo) => {
-          let valorCombo = VALOR_BASE_COMBO;
-          if (combo.primeiro_produto_acrescimo) valorCombo += parseFloat(combo.primeiro_produto_acrescimo);
-          if (combo.segundo_produto_acrescimo) valorCombo += parseFloat(combo.segundo_produto_acrescimo);
-          return acc + valorCombo;
-        }, 0) +
-        (sectionInfo?.tipo === '2' && (produtos.length > 0 || combos.length > 0) ? TAXA_ENTREGA : 0);
+      const totalSemDescontoCalc = parseFloat(totalSemDesconto);
 
       if (cupomInfo.tipo === 1) { // Valor fixo
         desconto = parseFloat(cupomInfo.valor);
@@ -287,8 +284,12 @@ const Sacola = ({ navigation }) => {
         desconto = totalSemDescontoCalc * (parseFloat(cupomInfo.valor) / 100);
       }
 
+      // Garante que o desconto não exceda o total
+      desconto = Math.min(desconto, totalSemDescontoCalc);
+
+      // Atualiza o estado do desconto
       setDescontoAplicado(desconto);
-      calcularTotais(produtos, combos, promocoes, sectionInfo?.tipo); // Recalcula totais com o desconto
+      
       setModalVisible(false);
       Alert.alert('Sucesso', `Cupom aplicado com sucesso! Desconto de R$ ${desconto.toFixed(2)}`);
     } catch (error) {
@@ -312,7 +313,6 @@ const Sacola = ({ navigation }) => {
       setDescontoAplicado(0);
       setCupomInfo(null);
       setCupom('');
-      calcularTotais(produtos, combos, promocoes, sectionInfo?.tipo); // Recalcula totais após remover cupom
     } catch (error) {
       console.error('Erro ao remover cupom:', error);
       Alert.alert('Erro', 'Não foi possível remover o cupom');
@@ -462,7 +462,8 @@ const Sacola = ({ navigation }) => {
 
   const irParaPagamento = () => {
     navigation.navigate('CriarPedidos', { 
-      total, // Envia apenas o valor com desconto
+      total: parseFloat(total),
+      totalSemDesconto: parseFloat(totalSemDesconto),
       totalPontos,
       promocoes,
       combos,
