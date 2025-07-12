@@ -70,7 +70,7 @@ const AbrirSecao = ({ navigation }) => {
   const fetchLojas = async () => {
     setLoading(true);
     try {
-      const response = await axios.get('https://sivpt-betaapi.onrender.com/api/loja/Lojas/Listar');
+      const response = await axios.get('https://sivpt-api-v2.onrender.com/api/loja/Lojas/Listar');
       setLojas(response.data);
     } catch (error) {
       console.error('Erro ao buscar lojas:', error);
@@ -134,7 +134,7 @@ const AbrirSecao = ({ navigation }) => {
       
       // Atualização no servidor
       const response = await axios.put(
-        `https://sivpt-betaapi.onrender.com/api/users/${userData.CPF}/endereco`,
+        `https://sivpt-api-v2.onrender.com/api/users/${userData.CPF}/endereco`,
         {
           endereco: enderecoCompleto,
           cep,
@@ -187,7 +187,7 @@ const AbrirSecao = ({ navigation }) => {
       // CORREÇÃO: Invertendo os tipos de seção
       const tipoSecaoNumerico = tipoSecao === 'entrega' ? 2 : 1;
 
-      const response = await axios.post('https://sivpt-betaapi.onrender.com/api/secao/secao/criar', {
+      const response = await axios.post('https://sivpt-api-v2.onrender.com/api/secao/secao/criar', {
         CPF_cliente: userData.CPF,
         CNPJ_loja: selectedLoja.CNPJ,
         Situacao: 1,

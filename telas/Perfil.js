@@ -119,7 +119,7 @@ export default function Perfil({ navigation }) {
       
       // Atualização no servidor (mantido como estava)
       const response = await axios.put(
-        `https://sivpt-betaapi.onrender.com/api/users/${user.CPF}/endereco`,
+        `https://sivpt-api-v2.onrender.com/api/users/${user.CPF}/endereco`,
         {
           endereco: enderecoCompleto,
           cep,

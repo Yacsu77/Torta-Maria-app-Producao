@@ -34,7 +34,7 @@ const api = axios.create({
 });
 
 const apiPedidos = axios.create({
-  baseURL: 'https://sivpt-betaapi.onrender.com/api',
+  baseURL: 'https://sivpt-api-v2.onrender.com/api',
   timeout: 30000,
 });
 

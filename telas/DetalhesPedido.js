@@ -15,7 +15,7 @@ export default function DetalhesPedido({ navigation }) {
     const carregarDetalhes = async () => {
       try {
         setLoading(true);
-        const response = await fetch(`https://sivpt-betaapi.onrender.com/api/pedidos/detalhes/${pedidoId}`);
+        const response = await fetch(`https://sivpt-api-v2.onrender.com/api/pedidos/detalhes/${pedidoId}`);
         
         if (!response.ok) {
           throw new Error('Erro ao carregar detalhes');

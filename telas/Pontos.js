@@ -65,7 +65,7 @@ const TelaTrocaPontos = ({ navigation }) => {
       setUserCPF(userData.CPF);
 
       // 2. Consultar pontos do usuário
-      const pontosResponse = await fetch(`https://sivpt-betaapi.onrender.com/api/pontos/pontos/consultar/${userData.CPF}`);
+      const pontosResponse = await fetch(`https://sivpt-api-v2.onrender.com/api/pontos/pontos/consultar/${userData.CPF}`);
       
       if (!pontosResponse.ok) {
         throw new Error('Falha ao carregar pontos');
@@ -76,8 +76,8 @@ const TelaTrocaPontos = ({ navigation }) => {
 
       // 3. Carregar categorias e produtos em paralelo
       const [categoriasResponse, produtosResponse] = await Promise.all([
-        fetch('https://sivpt-betaapi.onrender.com/api/pontos/Categoria/Listar'),
-        fetch('https://sivpt-betaapi.onrender.com/api/pontos/prontos/Listar')
+        fetch('https://sivpt-api-v2.onrender.com/api/pontos/Categoria/Listar'),
+        fetch('https://sivpt-api-v2.onrender.com/api/pontos/prontos/Listar')
       ]);
 
       if (!categoriasResponse.ok || !produtosResponse.ok) {

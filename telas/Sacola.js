@@ -65,12 +65,12 @@ const Sacola = ({ navigation }) => {
 
       if (secao && secao.id) {
         // Carrega produtos normais
-        const responseProdutos = await axios.get(`https://sivpt-betaapi.onrender.com/api/sacola/listar/itens/${secao.id}`);
+        const responseProdutos = await axios.get(`https://sivpt-api-v2.onrender.com/api/sacola/listar/itens/${secao.id}`);
         const produtosAgrupados = agruparProdutos(responseProdutos.data);
         setProdutos(produtosAgrupados);
 
         // Carrega combos
-        const responseCombos = await axios.get(`https://sivpt-betaapi.onrender.com/api/sacola/listar/combos/${secao.id}`);
+        const responseCombos = await axios.get(`https://sivpt-api-v2.onrender.com/api/sacola/listar/combos/${secao.id}`);
         setCombos(responseCombos.data);
 
         // Inicializa todos os combos como fechados
@@ -81,7 +81,7 @@ const Sacola = ({ navigation }) => {
         setExpandedCombos(initialExpandedState);
 
         // Carrega promoções
-        const responsePromocoes = await axios.get(`https://sivpt-betaapi.onrender.com/api/sacola/listar/pontos/${secao.id}`);
+        const responsePromocoes = await axios.get(`https://sivpt-api-v2.onrender.com/api/sacola/listar/pontos/${secao.id}`);
         setPromocoes(responsePromocoes.data);
       }
     } catch (error) {
@@ -164,7 +164,7 @@ const Sacola = ({ navigation }) => {
 
   const deletarItem = async (id) => {
     try {
-      await axios.delete(`https://sivpt-betaapi.onrender.com/api/sacola/deletar/itens/${id}`);
+      await axios.delete(`https://sivpt-api-v2.onrender.com/api/sacola/deletar/itens/${id}`);
       // Remove cupom quando um item é deletado
       if (cupomInfo && descontoAplicado > 0) {
         await removerCupom();
@@ -178,7 +178,7 @@ const Sacola = ({ navigation }) => {
 
   const deletarCombo = async (id) => {
     try {
-      await axios.delete(`https://sivpt-betaapi.onrender.com/api/sacola/deletar/combo/${id}`);
+      await axios.delete(`https://sivpt-api-v2.onrender.com/api/sacola/deletar/combo/${id}`);
       // Remove cupom quando um combo é deletado
       if (cupomInfo && descontoAplicado > 0) {
         await removerCupom();
@@ -192,7 +192,7 @@ const Sacola = ({ navigation }) => {
 
   const deletarPromocao = async (id) => {
     try {
-      await axios.delete(`https://sivpt-betaapi.onrender.com/api/sacola/deletar/pontos/${id}`);
+      await axios.delete(`https://sivpt-api-v2.onrender.com/api/sacola/deletar/pontos/${id}`);
       // Remove cupom quando uma promoção é deletada
       if (cupomInfo && descontoAplicado > 0) {
         await removerCupom();
@@ -206,7 +206,7 @@ const Sacola = ({ navigation }) => {
 
   const adicionarItem = async (ID_secao, Produto) => {
     try {
-      await axios.post('https://sivpt-betaapi.onrender.com/api/sacola/inseri/item', { ID_secao, Produto });
+      await axios.post('https://sivpt-api-v2.onrender.com/api/sacola/inseri/item', { ID_secao, Produto });
       // Remove cupom quando um item é adicionado
       if (cupomInfo && descontoAplicado > 0) {
         await removerCupom();
@@ -220,7 +220,7 @@ const Sacola = ({ navigation }) => {
 
   const adicionarPromocao = async (ID_secao, Produto_pontos) => {
     try {
-      await axios.post('https://sivpt-betaapi.onrender.com/api/sacola/inseri/pontos', { ID_secao, Produto_pontos });
+      await axios.post('https://sivpt-api-v2.onrender.com/api/sacola/inseri/pontos', { ID_secao, Produto_pontos });
       // Remove cupom quando uma promoção é adicionada
       if (cupomInfo && descontoAplicado > 0) {
         await removerCupom();
@@ -244,7 +244,7 @@ const Sacola = ({ navigation }) => {
         return;
       }
 
-      const response = await axios.post('https://sivpt-betaapi.onrender.com/api/sacola/cupom/validar', {
+      const response = await axios.post('https://sivpt-api-v2.onrender.com/api/sacola/cupom/validar', {
         cpf_cliente: userCpf,
         codigo_cupom: cupom
       });
@@ -269,7 +269,7 @@ const Sacola = ({ navigation }) => {
       }
 
       // Ativa o cupom
-      await axios.post('https://sivpt-betaapi.onrender.com/api/sacola/cupom/ativar', {
+      await axios.post('https://sivpt-api-v2.onrender.com/api/sacola/cupom/ativar', {
         cpf_cliente: userCpf,
         id_cupom: cupomInfo.id
       });
@@ -304,7 +304,7 @@ const Sacola = ({ navigation }) => {
     }
 
     try {
-      await axios.delete('https://sivpt-betaapi.onrender.com/api/sacola/cupom/ativo/remover', {
+      await axios.delete('https://sivpt-api-v2.onrender.com/api/sacola/cupom/ativo/remover', {
         data: {
           cpf_cliente: userCpf,
           id_cupom: cupomInfo.id

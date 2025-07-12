@@ -70,7 +70,7 @@ const Produtos = ({ route, navigation }) => {
       if (secao) {
         setIdSecao(secao.id);
         // Busca dados da seção
-        const secaoResponse = await axios.get(`https://sivpt-betaapi.onrender.com/api/secao/secao/${secao.id}`);
+        const secaoResponse = await axios.get(`https://sivpt-api-v2.onrender.com/api/secao/secao/${secao.id}`);
         const { CNPJ_loja } = secaoResponse.data;
         setLojaSelecionada({ cnpj: CNPJ_loja });
         return true;
@@ -92,7 +92,7 @@ const Produtos = ({ route, navigation }) => {
 
       if (lojaSelecionada) {
         // Busca produtos em estoque da loja
-        const response = await axios.get(`https://sivpt-betaapi.onrender.com/api/produtos/Estoque/listar/${lojaSelecionada.cnpj}`);
+        const response = await axios.get(`https://sivpt-api-v2.onrender.com/api/produtos/Estoque/listar/${lojaSelecionada.cnpj}`);
         
         if (response.data.produtos && response.data.produtos.length > 0) {
           const produtosFormatados = response.data.produtos.map(p => ({
@@ -107,7 +107,7 @@ const Produtos = ({ route, navigation }) => {
           setProdutos(produtosFormatados);
           
           // Busca categorias dos produtos em estoque
-          const categoriasResponse = await axios.get('https://sivpt-betaapi.onrender.com/api/produtos/Categiria/Listar');
+          const categoriasResponse = await axios.get('https://sivpt-api-v2.onrender.com/api/produtos/Categiria/Listar');
           const categoriasIds = [...new Set(produtosFormatados.map(p => p.categoria_id))];
           setCategorias(categoriasResponse.data.filter(c => categoriasIds.includes(c.id)));
         } else {
@@ -117,8 +117,8 @@ const Produtos = ({ route, navigation }) => {
       } else {
         // Lista todos os produtos quando não há seção aberta
         const [responseCategorias, responseProdutos] = await Promise.all([
-          axios.get('https://sivpt-betaapi.onrender.com/api/produtos/Categiria/Listar'),
-          axios.get('https://sivpt-betaapi.onrender.com/api/produtos/Produtos/Listar')
+          axios.get('https://sivpt-api-v2.onrender.com/api/produtos/Categiria/Listar'),
+          axios.get('https://sivpt-api-v2.onrender.com/api/produtos/Produtos/Listar')
         ]);
         setCategorias(responseCategorias.data);
         setProdutos(responseProdutos.data);
@@ -161,7 +161,7 @@ const Produtos = ({ route, navigation }) => {
     }
 
     try {
-      await axios.post('https://sivpt-betaapi.onrender.com/api/sacola/inseri/item', {
+      await axios.post('https://sivpt-api-v2.onrender.com/api/sacola/inseri/item', {
         ID_secao: idSecao,
         Produto: produtoId
       });

@@ -48,7 +48,7 @@ const DetalhesPromocao = ({ route }) => {
     }
 
     try {
-      const response = await fetch('https://sivpt-betaapi.onrender.com/api/sacola/inseri/pontos', {
+      const response = await fetch('https://sivpt-api-v2.onrender.com/api/sacola/inseri/pontos', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

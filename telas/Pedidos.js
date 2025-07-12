@@ -48,7 +48,7 @@ const ListaPedidos = () => {
   const fetchPedidos = async (cpf) => {
     try {
       setLoading(true);
-      const response = await fetch(`https://sivpt-betaapi.onrender.com/api/pedido/listar/cliente/${cpf}`);      
+      const response = await fetch(`https://sivpt-api-v2.onrender.com/api/pedido/listar/cliente/${cpf}`);      
       if (!response.ok) {
         throw new Error(`Erro HTTP: ${response.status}`);
       }
@@ -77,7 +77,7 @@ const ListaPedidos = () => {
         throw new Error('ID do pedido não fornecido');
       }
 
-      const response = await fetch(`https://sivpt-betaapi.onrender.com/api/pedido/atualizar-situacao/${pedidoId}`, {
+      const response = await fetch(`https://sivpt-api-v2.onrender.com/api/pedido/atualizar-situacao/${pedidoId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',

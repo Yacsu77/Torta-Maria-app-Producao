@@ -43,7 +43,7 @@ const DetalheProduto = ({ route, navigation }) => {
     // Carrega produtos aleatórios/relacionados
     const carregarProdutosRelacionados = async () => {
       try {
-        const response = await axios.get('https://sivpt-betaapi.onrender.com/api/produtos/Produtos/Listar');
+        const response = await axios.get('https://sivpt-api-v2.onrender.com/api/produtos/Produtos/Listar');
         // Filtra o produto atual e pega 4 aleatórios
         const filtrados = response.data.filter(p => p.id !== produto.id);
         const aleatorios = filtrados.sort(() => 0.5 - Math.random()).slice(0, 4);
@@ -81,7 +81,7 @@ const DetalheProduto = ({ route, navigation }) => {
     }
 
     try {
-      await axios.post('https://sivpt-betaapi.onrender.com/api/sacola/inseri/item', {
+      await axios.post('https://sivpt-api-v2.onrender.com/api/sacola/inseri/item', {
         ID_secao: idSecao,
         Produto: produto.id
       });

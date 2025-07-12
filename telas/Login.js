@@ -7,7 +7,7 @@ export default function Login({ navigation }) {
   const [senha, setSenha] = useState('');
 
   const handleLogin = async () => {
-    const res = await fetch('https://sivpt-betaapi.onrender.com/api/users/users/login', {
+    const res = await fetch('https://sivpt-api-v2.onrender.com/api/users/users/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, senha }),

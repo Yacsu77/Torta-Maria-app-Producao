@@ -204,7 +204,7 @@ export default function Cadastro({ navigation }) {
     // Combina endereço com número
     const enderecoCompleto = `${form.endereco}, ${form.numero}`;
 
-    const res = await fetch('https://sivpt-betaapi.onrender.com/api/users/users/register', {
+    const res = await fetch('https://sivpt-api-v2.onrender.com/api/users/users/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

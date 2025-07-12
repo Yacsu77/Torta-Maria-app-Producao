@@ -142,7 +142,7 @@ const CriarPedidos = () => {
     }
 
     try {
-      const response = await fetch('https://sivpt-betaapi.onrender.com/api/pontos/pontos/remover', {
+      const response = await fetch('https://sivpt-api-v2.onrender.com/api/pontos/pontos/remover', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -190,7 +190,7 @@ const CriarPedidos = () => {
         Hora_Pedido: horaFormatada // Garante o formato correto
       };
 
-      const response = await fetch('https://sivpt-betaapi.onrender.com/api/pedido/inserir', {
+      const response = await fetch('https://sivpt-api-v2.onrender.com/api/pedido/inserir', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
