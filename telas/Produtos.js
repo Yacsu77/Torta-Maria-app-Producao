@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { 
   View, 
@@ -34,10 +33,11 @@ const Produtos = ({ route, navigation }) => {
   const [idSecao, setIdSecao] = useState(null);
   const [lojaSelecionada, setLojaSelecionada] = useState(route.params?.loja || null);
   const [refreshing, setRefreshing] = useState(false);
+  const [nomeLoja, setNomeLoja] = useState('');
 
-  // Cores padrão
+  // Cores padrão - Alterado a cor primary para laranja
   const colors = {
-    primary: '#2ecc71', // Verde
+    primary: '#e67e22', // Laranja (antigo verde)
     secondary: '#e67e22', // Laranja
     background: '#f9f9f9',
     text: '#333',
@@ -73,10 +73,18 @@ const Produtos = ({ route, navigation }) => {
         const secaoResponse = await axios.get(`https://sivpt-api-v2.onrender.com/api/secao/secao/${secao.id}`);
         const { CNPJ_loja } = secaoResponse.data;
         setLojaSelecionada({ cnpj: CNPJ_loja });
+        
+        // Busca o nome da loja
+        const lojaResponse = await axios.get(`https://sivpt-api-v2.onrender.com/api/produtos/Estoque/listar/${CNPJ_loja}`);
+        if (lojaResponse.data.loja) {
+          setNomeLoja(lojaResponse.data.loja.nome);
+        }
+        
         return true;
       } else {
         setIdSecao(null);
         setLojaSelecionada(null);
+        setNomeLoja('');
         return false;
       }
     } catch (err) {
@@ -93,6 +101,10 @@ const Produtos = ({ route, navigation }) => {
       if (lojaSelecionada) {
         // Busca produtos em estoque da loja
         const response = await axios.get(`https://sivpt-api-v2.onrender.com/api/produtos/Estoque/listar/${lojaSelecionada.cnpj}`);
+        
+        if (response.data.loja) {
+          setNomeLoja(response.data.loja.nome);
+        }
         
         if (response.data.produtos && response.data.produtos.length > 0) {
           const produtosFormatados = response.data.produtos.map(p => ({
@@ -122,6 +134,7 @@ const Produtos = ({ route, navigation }) => {
         ]);
         setCategorias(responseCategorias.data);
         setProdutos(responseProdutos.data);
+        setNomeLoja('');
       }
     } catch (err) {
       console.error('Erro ao carregar dados:', err);
@@ -236,6 +249,13 @@ const Produtos = ({ route, navigation }) => {
         style={styles.backgroundImage}
         resizeMode="cover"
       />
+
+      {/* Nome da loja em laranja acima da barra de pesquisa */}
+      {nomeLoja ? (
+        <View style={styles.lojaNomeContainer}>
+          <Text style={[styles.lojaNome, { color: colors.primary }]}>{nomeLoja}</Text>
+        </View>
+      ) : null}
 
       <TextInput
         style={[styles.searchBar, { 
@@ -391,6 +411,17 @@ const styles = StyleSheet.create({
   retryButtonText: {
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  lojaNomeContainer: {
+    paddingHorizontal: 15,
+    paddingTop: 10,
+    justifyContent: 'center', // Centers horizontally
+    alignItems: 'center', // Centers vertically
+  },
+  lojaNome: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    textAlign: 'center', // Ensures text is centered within its own bounds
   },
   searchBar: {
     borderRadius: 8,

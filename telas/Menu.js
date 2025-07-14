@@ -15,7 +15,6 @@ import AbrirSeção from './AbrirSecao';
 import Sacola from './Sacola';
 import CriarPedido from './CriarPedidos';
 import Pagamento from './Pagamento';
-import ConfirmacaoPagamentos from './ConfirmacaoPagamento';
 import DetalhesProntos from './DetalhesProntos';
 import DetalheProduto from './DetalheProduto';
 import Vadecombo from './Vadecombo';
@@ -28,14 +27,14 @@ const RootStack = createStackNavigator();
 
 // Cores da paleta
 const colors = {
-  primaryGreen: '#2E7D32',
-  darkGreen: '#1B5E20',
-  lightGreen: '#81C784',
+  primaryGray: '#616161',
+  darkGray: '#424242',
+  lightGray: '#B0BEC5',
   primaryOrange: '#FB8C00',
   darkOrange: '#F57C00',
   lightOrange: '#FFB74D',
   white: '#FFFFFF',
-  lightGray: '#F5F5F5',
+  veryLightGray: '#F5F5F5',
   darkText: '#212121'
 };
 
@@ -47,7 +46,7 @@ const agruparProdutos = (produtos) => {
 
 // Componente do cabeçalho personalizado
 const CustomHeader = ({ navigation }) => {
-  const { sacolaCount, selectedLoja } = useContext(AppContext);
+  const { sacolaCount } = useContext(AppContext);
 
   return (
     <View style={styles.headerContainer}>
@@ -57,7 +56,7 @@ const CustomHeader = ({ navigation }) => {
       >
         <MaterialIcons name="store" size={20} color={colors.white} />
         <Text style={[styles.headerButtonText, { color: colors.white }]}>
-          {selectedLoja ? selectedLoja.Nome_loja : 'Escolher Loja'}
+          Escolher Loja
         </Text>
       </TouchableOpacity>
       
@@ -134,7 +133,7 @@ function MainTabs() {
           marginBottom: 5
         },
         headerStyle: {
-          backgroundColor: colors.primaryGreen,
+          backgroundColor: colors.primaryGray,
           elevation: 0,
           shadowOpacity: 0,
           height: 0
@@ -164,19 +163,13 @@ function MainTabs() {
 // Provedor de contexto para gerenciar o estado global
 const AppProvider = ({ children }) => {
   const [sacolaCount, setSacolaCount] = useState(0);
-  const [selectedLoja, setSelectedLoja] = useState(null);
   const [currentSection, setCurrentSection] = useState(null);
 
-  // Carrega a seção atual e a loja selecionada
+  // Carrega a seção atual
   const loadSectionData = async () => {
     try {
       const section = await getCurrentSection();
       setCurrentSection(section);
-      
-      const loja = await AsyncStorage.getItem('selectedLoja');
-      if (loja) {
-        setSelectedLoja(JSON.parse(loja));
-      }
     } catch (error) {
       console.error('Erro ao carregar dados da seção:', error);
     }
@@ -206,36 +199,22 @@ const AppProvider = ({ children }) => {
     }
   };
 
-  // Atualiza a loja selecionada
-  const updateSelectedLoja = async (loja) => {
-    try {
-      await AsyncStorage.setItem('selectedLoja', JSON.stringify(loja));
-      setSelectedLoja(loja);
-      loadSacolaCount(); // Atualiza a contagem da sacola quando a loja muda
-    } catch (error) {
-      console.error('Erro ao atualizar loja selecionada:', error);
-    }
-  };
-
   // Carrega os dados iniciais
   useEffect(() => {
     loadSectionData();
   }, []);
 
-  // Atualiza a contagem da sacola quando a seção ou loja muda
+  // Atualiza a contagem da sacola quando a seção muda
   useEffect(() => {
-    if (currentSection && selectedLoja) {
+    if (currentSection) {
       loadSacolaCount();
     }
-  }, [currentSection, selectedLoja]);
+  }, [currentSection]);
 
   return (
     <AppContext.Provider value={{
       sacolaCount,
-      selectedLoja,
-      currentSection,
-      loadSacolaCount,
-      updateSelectedLoja
+      loadSacolaCount
     }}>
       {children}
     </AppContext.Provider>
@@ -246,7 +225,7 @@ const AppProvider = ({ children }) => {
 function MenuStack() {
   return (
     <>
-      <StatusBar backgroundColor={colors.darkGreen} barStyle="light-content" />
+      <StatusBar backgroundColor={colors.darkGray} barStyle="light-content" />
 
       <RootStack.Navigator mode="modal">
         <RootStack.Screen
@@ -317,11 +296,6 @@ function MenuStack() {
           options={{ headerShown: false }}
         />
 
-        <RootStack.Screen
-          name="ConfirmacaoPagamentos"
-          component={ConfirmacaoPagamentos}
-          options={{ headerShown: false }}
-        />
       </RootStack.Navigator>
     </>
   );
@@ -343,20 +317,21 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 20,
     paddingVertical: 10,
-    backgroundColor: colors.primaryGreen,
-    height: 120
+    backgroundColor: '#f9f9f9',
+    height: 80,
+    marginTop: 15
   },
   headerButton: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 8,
     paddingHorizontal: 15,
-    borderRadius: 20,
+    borderRadius: 8,
     shadowColor: colors.darkText,
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 3
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2
   },
   headerButtonText: {
     fontWeight: '600',
